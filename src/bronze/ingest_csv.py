@@ -1,3 +1,16 @@
+import os
+import sys
+
+# Safe path resolution for Databricks runtime environment
+try:
+    script_dir = os.path.dirname(__file__)
+except NameError:
+    script_dir = os.getcwd()
+
+for p in [script_dir, os.path.abspath(os.path.join(script_dir, "../..")), os.path.abspath(os.path.join(script_dir, ".."))]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
 from datetime import datetime
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import current_timestamp, col
