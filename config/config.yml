@@ -1,0 +1,19 @@
+catalog: "dbx_maven_market"
+schemas:
+  bronze: "bronze"
+  silver: "silver"
+  gold: "gold"
+  audit: "audit"
+
+storage:
+  root_path: "abfss://uc-root@sgmavenmarket.dfs.core.windows.net"
+  checkpoint_path: "abfss://uc-root@sgmavenmarket.dfs.core.windows.net/checkpoints"
+
+quality_expectations:
+  transactions:
+    valid_id: "transaction_id IS NOT NULL"
+    valid_quantity: "quantity > 0"
+  customers:
+    valid_id: "customer_id IS NOT NULL"
+  products:
+    valid_id: "product_id IS NOT NULL"
