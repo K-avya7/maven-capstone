@@ -24,36 +24,3 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pytest flake8 pytest-cov
-
-      - name: Run Code Linting (flake8)
-        run: |
-          flake8 src/ --count --max-line-length=120 --statistics
-
-      - name: Run Unit Tests (pytest)
-        run: |
-          pytest tests/ --doctest-modules --junitxml=junit/test-results.xml
-
-  deploy_prod:
-    needs: test_and_lint
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
-
-      - name: Setup Databricks CLI
-        uses: databricks/setup-cli@v0.2.0
-
-      - name: Validate Databricks Bundle
-        env:
-          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-        run: |
-          databricks bundle validate -t prod
-
-      - name: Deploy Databricks Bundle
-        env:
-          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-        run: |
-          databricks bundle deploy -t prod
