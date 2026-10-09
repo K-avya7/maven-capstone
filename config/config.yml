@@ -9,6 +9,17 @@ storage:
   root_path: "abfss://uc-root@sgmavenmarket.dfs.core.windows.net"
   checkpoint_path: "abfss://uc-root@sgmavenmarket.dfs.core.windows.net/checkpoints"
 
+ingestion:
+  batch_csv_entities:
+    - folder: "transactions"
+      table: "transactions_1997"
+    - folder: "regions"
+      table: "regions"
+    - folder: "stores"
+      table: "stores"
+    - folder: "calendar"
+      table: "calendar"
+
 quality_expectations:
   transactions:
     valid_id: "transaction_id IS NOT NULL"
@@ -17,3 +28,5 @@ quality_expectations:
     valid_id: "customer_id IS NOT NULL"
   products:
     valid_id: "product_id IS NOT NULL"
+  returns:
+    valid_quantity: "quantity > 0"

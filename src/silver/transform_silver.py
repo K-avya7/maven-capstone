@@ -1,56 +1,62 @@
 import dlt
 from pyspark.sql.functions import col, lit, to_date, to_timestamp, concat_ws, coalesce
 
+# Load dynamic pipeline parameters
+CATALOG = spark.conf.get("pipeline.catalog", "dbx_maven_market")
+BRONZE_SCHEMA = spark.conf.get("pipeline.bronze_schema", "bronze")
+
 # ==========================================
-# 1. BRONZE SOURCE VIEWS (Pipeline Wrappers)
+# 1. BRONZE SOURCE VIEWS
 # ==========================================
 
 @dlt.view
 def view_bronze_transactions_batch():
-    return spark.table("dbx_maven_market.bronze.transactions_1997")
+    return spark.table(f"{CATALOG}.{BRONZE_SCHEMA}.transactions_1997")
 
 @dlt.view
 def view_bronze_orders_stream():
-    return spark.table("dbx_maven_market.bronze.raw_orders")
+    return spark.table(f"{CATALOG}.{BRONZE_SCHEMA}.raw_orders")
 
-# Handles batch table overwrites/updates safely for streaming SCD Type 2
 @dlt.view
 def view_bronze_customers():
     return (
         spark.readStream
         .option("skipChangeCommits", "true")
         .option("ignoreChanges", "true")
-        .table("dbx_maven_market.bronze.customers")
+        .table(f"{CATALOG}.{BRONZE_SCHEMA}.raw_customers")
     )
 
-# Handles batch table overwrites/updates safely for streaming SCD Type 2
 @dlt.view
 def view_bronze_products():
     return (
         spark.readStream
         .option("skipChangeCommits", "true")
         .option("ignoreChanges", "true")
-        .table("dbx_maven_market.bronze.raw_products")
+        .table(f"{CATALOG}.{BRONZE_SCHEMA}.raw_products")
     )
 
 @dlt.view
 def view_bronze_stores():
-    return spark.table("dbx_maven_market.bronze.stores")
+    return spark.table(f"{CATALOG}.{BRONZE_SCHEMA}.stores")
 
 @dlt.view
 def view_bronze_regions():
-    return spark.table("dbx_maven_market.bronze.regions")
+    return spark.table(f"{CATALOG}.{BRONZE_SCHEMA}.regions")
 
 @dlt.view
 def view_bronze_returns():
-    return spark.table("dbx_maven_market.bronze.returns")
+    return spark.table(f"{CATALOG}.{BRONZE_SCHEMA}.analyst_returns_csv")
+
+@dlt.view
+def view_bronze_inventory():
+    return spark.table(f"{CATALOG}.{BRONZE_SCHEMA}.raw_inventory")
 
 
 # ==========================================
 # 2. SILVER TABLES & TRANSFORMATIONS
 # ==========================================
 
-# --- UNIFIED TRANSACTIONS (STREAM + BATCH) ---
+# --- UNIFIED TRANSACTIONS ---
 @dlt.table(
     name="silver_transactions",
     comment="Unified view of historical batch transactions and streaming live orders",
@@ -70,7 +76,7 @@ def silver_transactions():
     )
     
     stream_df = dlt.read("view_bronze_orders_stream").select(
-        concat_ws("-", lit("stream"), col("customer_key"), col("product_id"), col("transaction_date")).alias("transaction_id"),
+        concat_ws("-", lit("stream"), col("customer_id"), col("product_id"), col("transaction_date")).alias("transaction_id"),
         col("customer_id").cast("string"),
         col("product_id").cast("string"),
         col("store_id").cast("string"),
@@ -82,7 +88,7 @@ def silver_transactions():
     return batch_df.unionByName(stream_df)
 
 
-# --- STORES & REGIONS ---
+# --- STORES & REGIONS DENORMALIZATION ---
 @dlt.table(
     name="silver_stores",
     comment="Enriched store dimension denormalized with region attributes",
@@ -123,17 +129,34 @@ def silver_returns():
     )
 
 
+# --- REAL-TIME INVENTORY ---
+@dlt.table(
+    name="silver_inventory",
+    comment="Cleaned real-time inventory snapshot from Kafka stream",
+    table_properties={"quality": "silver"}
+)
+def silver_inventory():
+    return dlt.read("view_bronze_inventory").select(
+        coalesce(to_timestamp(col("inventory_date")), to_date(col("inventory_date"))).alias("inventory_date"),
+        col("store_id").cast("string"),
+        col("product_id").cast("string"),
+        col("stock_on_hand").cast("int"),
+        col("reorder_flag").cast("int")
+    )
+
+
 # --- SCD TYPE 2: CUSTOMERS ---
 dlt.create_streaming_table(
     name="silver_customers",
-    comment="SCD Type 2 tracking table for Customer master attributes"
+    comment="SCD Type 2 tracking table for Customer master attributes",
+    table_properties={"quality": "silver"}
 )
 
 dlt.apply_changes(
     target="silver_customers",
     source="view_bronze_customers",
     keys=["customer_id"],
-    sequence_by=col("acct_open_date"),
+    sequence_by=col("_ingestion_timestamp"),
     stored_as_scd_type="2",
     track_history_column_list=[
         "customer_address", "customer_city", "customer_state_province",
@@ -145,7 +168,8 @@ dlt.apply_changes(
 # --- SCD TYPE 2: PRODUCTS ---
 dlt.create_streaming_table(
     name="silver_products",
-    comment="SCD Type 2 tracking table for Product catalog attributes"
+    comment="SCD Type 2 tracking table for Product catalog attributes",
+    table_properties={"quality": "silver"}
 )
 
 dlt.apply_changes(

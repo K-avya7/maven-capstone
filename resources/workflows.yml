@@ -23,12 +23,12 @@ resources:
         - task_key: ingest_nosql_mongodb
           environment_key: default
           notebook_task:
-            notebook_path: /Workspace/Kafka_ingestion/Maven_Market/1.MongoDB Ingestion/mongodb_Ingestion
+            notebook_path: ../src/bronze/mongodb_Ingestion.ipynb
 
         - task_key: ingest_kafka_stream
           environment_key: default
           notebook_task:
-            notebook_path: /Workspace/Kafka_ingestion/01_ingest_kafka_orders
+            notebook_path: ../src/bronze/kafka_Ingestion.ipynb
 
         - task_key: execute_silver_dlt
           depends_on:
@@ -43,3 +43,10 @@ resources:
             - task_key: execute_silver_dlt
           pipeline_task:
             pipeline_id: ${resources.pipelines.maven_market_gold_dlt.id}
+
+        - task_key: log_dlt_audit_telemetry
+          depends_on:
+            - task_key: execute_gold_dlt
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/common/log_dlt_metrics.py
