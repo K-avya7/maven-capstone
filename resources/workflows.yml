@@ -50,3 +50,11 @@ resources:
           environment_key: default
           spark_python_task:
             python_file: ../src/common/log_dlt_metrics.py
+
+        - task_key: verify_abac_governance
+          depends_on:
+            - task_key: execute_gold_dlt
+            - task_key: log_dlt_audit_telemetry
+          environment_key: default
+          spark_python_task:
+            python_file: ../tests/test_abac_verification.py
