@@ -36,7 +36,6 @@ jobs:
   deploy_to_databricks:
     name: Deploy Bundle to Databricks
     needs: build_and_test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
 
     steps:
@@ -44,7 +43,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Setup Databricks CLI
-        uses: databricks/setup-cli@v0.2.1
+        uses: databricks/setup-cli@v0.2
 
       - name: Validate Databricks Asset Bundle
         env:
