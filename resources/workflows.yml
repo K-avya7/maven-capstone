@@ -6,34 +6,29 @@ resources:
         quartz_cron_expression: "0 0 2 * * ?"
         timezone_id: "UTC"
 
-      job_clusters:
-        - job_cluster_key: ingestion_cluster
-          new_cluster:
-            spark_version: "14.3.x-scala2.12"
-            node_type_id: "Standard_D4s_v5"
-            num_workers: 0
-            spark_conf:
-              spark.databricks.cluster.profile: "singleNode"
-              spark.master: "local[*]"
-            custom_tags:
-              ResourceClass: "SingleNode"
-              project: "maven_market"
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "1"
+            dependencies:
+              - pymongo
+              - pandas
 
       tasks:
         - task_key: ingest_batch_csv
-          job_cluster_key: ingestion_cluster
+          environment_key: default
           spark_python_task:
             python_file: ../src/bronze/ingest_csv.py
 
         - task_key: ingest_nosql_mongodb
-          job_cluster_key: ingestion_cluster
-          spark_python_task:
-            python_file: ../src/bronze/ingest_mongodb.py
+          environment_key: default
+          notebook_task:
+            notebook_path: ../src/bronze/mongodb_Ingestion.ipynb
 
         - task_key: ingest_kafka_stream
-          job_cluster_key: ingestion_cluster
-          spark_python_task:
-            python_file: ../src/bronze/ingest_kafka.py
+          environment_key: default
+          notebook_task:
+            notebook_path: ../src/bronze/kafka_Ingestion.ipynb
 
         - task_key: execute_silver_dlt
           depends_on:
@@ -48,3 +43,10 @@ resources:
             - task_key: execute_silver_dlt
           pipeline_task:
             pipeline_id: ${resources.pipelines.maven_market_gold_dlt.id}
+
+        - task_key: log_dlt_audit_telemetry
+          depends_on:
+            - task_key: execute_gold_dlt
+          environment_key: default
+          spark_python_task:
+            python_file: ../src/common/log_dlt_metrics.py

@@ -4,9 +4,7 @@ resources:
       name: maven_market_gold_pipeline
       catalog: dbx_maven_market
       schema: gold
-      development: false
-      edition: PRO
-      photon: true
+      serverless: true
       libraries:
         - file:
             path: ../src/gold/aggregate_gold.py

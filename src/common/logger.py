@@ -1,58 +1,79 @@
 import uuid
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from pyspark.sql import SparkSession
+from pyspark.sql.types import (
+    StructType,
+    StructField,
+    StringType,
+    TimestampType,
+    DoubleType,
+    LongType,
+)
 
-class AuditLogger:
-    def __init__(self, spark: SparkSession, pipeline_name: str, task_name: str):
+
+class CentralLogger:
+    def __init__(self, spark: SparkSession, audit_table: str = "dbx_maven_market.audit.audit_logs"):
         self.spark = spark
-        self.pipeline_name = pipeline_name
-        self.task_name = task_name
-        self.log_id = str(uuid.uuid4())
-        self.start_time = datetime.now()
-        
-    def log_success(self, records_processed: int = 0, records_failed: int = 0):
-        end_time = datetime.now()
-        duration = (end_time - self.start_time).total_seconds()
-        
-        self._write_log(
-            status="SUCCESS",
-            end_time=end_time,
-            duration=duration,
-            records_processed=records_processed,
-            records_failed=records_failed,
-            error_message=None,
-            stack_trace=None
-        )
+        self.audit_table = audit_table
 
-    def log_failure(self, error: Exception):
-        end_time = datetime.now()
-        duration = (end_time - self.start_time).total_seconds()
-        
-        self._write_log(
-            status="FAILED",
-            end_time=end_time,
-            duration=duration,
-            records_processed=0,
-            records_failed=0,
-            error_message=str(error),
-            stack_trace=traceback.format_exc()
-        )
+    def log_execution(
+        self,
+        pipeline_name: str,
+        task_name: str,
+        execution_status: str,
+        start_time: datetime,
+        records_processed: int = 0,
+        records_failed: int = 0,
+        error: Exception = None,
+    ):
+        end_time = datetime.now(timezone.utc)
 
-    def _write_log(self, status, end_time, duration, records_processed, records_failed, error_message, stack_trace):
+        # Handle offset-naive start_time input automatically
+        if start_time.tzinfo is None:
+            start_time = start_time.replace(tzinfo=timezone.utc)
+
+        duration_seconds = float((end_time - start_time).total_seconds())
+
+        try:
+            executed_by = self.spark.sql("SELECT current_user()").collect()[0][0]
+        except Exception:
+            executed_by = "system"
+
+        error_message = str(error) if error else None
+        stack_trace = traceback.format_exc() if error else None
+
         log_data = [(
-            self.log_id, self.pipeline_name, self.task_name, status,
-            self.start_time, end_time, duration, records_processed,
-            records_failed, error_message, stack_trace,
-            self.spark.eval("CURRENT_USER()"), datetime.now()
+            str(uuid.uuid4()),
+            pipeline_name,
+            task_name,
+            execution_status,
+            start_time,
+            end_time,
+            duration_seconds,
+            int(records_processed),
+            int(records_failed),
+            error_message,
+            stack_trace,
+            executed_by,
+            end_time,
         )]
-        
-        columns = [
-            "log_id", "pipeline_name", "task_name", "execution_status",
-            "start_time", "end_time", "duration_seconds", "records_processed",
-            "records_failed", "error_message", "stack_trace",
-            "executed_by", "log_timestamp"
-        ]
-        
-        df = self.spark.createDataFrame(log_data, schema=columns)
-        df.write.format("delta").mode("append").saveAsTable("dbx_maven_market.audit.audit_logs")
+
+        schema = StructType([
+            StructField("log_id", StringType(), True),
+            StructField("pipeline_name", StringType(), True),
+            StructField("task_name", StringType(), True),
+            StructField("execution_status", StringType(), True),
+            StructField("start_time", TimestampType(), True),
+            StructField("end_time", TimestampType(), True),
+            StructField("duration_seconds", DoubleType(), True),
+            StructField("records_processed", LongType(), True),
+            StructField("records_failed", LongType(), True),
+            StructField("error_message", StringType(), True),
+            StructField("stack_trace", StringType(), True),
+            StructField("executed_by", StringType(), True),
+            StructField("log_timestamp", TimestampType(), True),
+        ])
+
+        log_df = self.spark.createDataFrame(log_data, schema=schema)
+        log_df.write.format("delta").mode("append").saveAsTable(self.audit_table)
