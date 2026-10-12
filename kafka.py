@@ -1,69 +1,70 @@
-import csv
-import json
-import time
-import os
-from confluent_kafka import Producer
+from pyspark.sql.functions import col, from_json, current_timestamp, expr
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType
 
-# Updated path to match your current file location
-csv_file = r"C:/Users/KavyaAgrawal/Downloads/Data-20260414T080156Z-3-001/Data/SPTStore Data Files/Transactions/MavenMarket_Transactions_1998.csv"
+# 1. Define JSON Schema matching the 6-column payload
+transaction_schema = StructType([
+    StructField("transaction_date", StringType(), True),
+    StructField("stock_date", StringType(), True),
+    StructField("product_id", IntegerType(), True),
+    StructField("customer_id", IntegerType(), True),
+    StructField("store_id", IntegerType(), True),
+    StructField("quantity", IntegerType(), True)
+])
 
-# Check if file exists
-if not os.path.exists(csv_file):
-    print(f"ERROR: Cannot find {csv_file}")
-    exit(1)
+# 2. Retrieve Secrets & Setup Confluent Connection (Shaded JAAS Module for Serverless)
+kafka_server = "pkc-w77k7w.centralus.azure.confluent.cloud:9092"
+kafka_topic = "orders-stream"
 
-# Confluent Cloud Kafka Credentials
-# Replace these with your newly rotated credentials
-conf = {
-    'bootstrap.servers': 'pkc-w77k7w.centralus.azure.confluent.cloud:9092',
-    'security.protocol': 'SASL_SSL',
-    'sasl.mechanisms': 'PLAIN',
-    'sasl.username': 'OPY6NFHYT2UWERIN',
-    'sasl.password': 'cfltjtlMTVzl047tjHEdlt3I+mO091xgomV2eK0IrQAj/tW07B4ZMxDNR+nY93ww'
-}
+kafka_key = dbutils.secrets.get(scope="maven-secrets", key="kafka-api-key")
+kafka_secret = dbutils.secrets.get(scope="maven-secrets", key="kafka-api-secret")
 
-producer = Producer(conf)
-topic = 'orders-stream'
+# Use shaded LoginModule prefix required by Serverless Compute
+jaas_config = f'kafkashaded.org.apache.kafka.common.security.plain.PlainLoginModule required username="{kafka_key}" password="{kafka_secret}";'
 
+# 3. Read Stream from Kafka
+raw_kafka_stream = (
+    spark.readStream
+    .format("kafka")
+    .option("kafka.bootstrap.servers", kafka_server)
+    .option("subscribe", kafka_topic)
+    .option("kafka.security.protocol", "SASL_SSL")
+    .option("kafka.sasl.mechanism", "PLAIN")
+    .option("kafka.sasl.jaas.config", jaas_config)
+    .option("kafka.ssl.endpoint.identification.algorithm", "https")
+    .option("startingOffsets", "earliest")
+    .load()
+)
 
-def delivery_report(err, msg):
-    if err is not None:
-        print(f"Delivery failed: {err}")
+# 4. Cast Binary Payload to String & Extract JSON Columns
+parsed_transactions_df = (
+    raw_kafka_stream
+    .select(
+        col("key").cast("string").alias("customer_key"),
+        from_json(col("value").cast("string"), transaction_schema).alias("data"),
+        col("timestamp").alias("kafka_timestamp")
+    )
+    .select(
+        "customer_key",
+        "data.transaction_date",
+        "data.stock_date",
+        "data.product_id",
+        "data.customer_id",
+        "data.store_id",
+        "data.quantity",
+        "kafka_timestamp"
+    )
+    .withColumn("_ingestion_timestamp", current_timestamp())
+    .withColumn("_source", expr("'confluent_kafka_orders_stream'"))
+)
 
+# 5. Write Stream into Unity Catalog Bronze Delta Table
+checkpoint_path = "/Volumes/dbx_maven_market/default/my_volume/checkpoints/orders_stream_checkpoint_serverless2/"
 
-print("Starting real-time streaming producer for MavenMarket_Transactions_1998.csv...")
-
-with open(csv_file, mode='r', encoding='utf-8') as f:
-    reader = csv.DictReader(f)
-    count = 0
-
-    for row in reader:
-        payload_data = {
-            "transaction_date": row["transaction_date"],
-            "stock_date": row["stock_date"],
-            "product_id": int(row["product_id"]),
-            "customer_id": int(row["customer_id"]),
-            "store_id": int(row["store_id"]),
-            "quantity": int(row["quantity"])
-        }
-
-        producer.produce(
-            topic=topic,
-            key=str(row["customer_id"]),
-            value=json.dumps(payload_data),
-            callback=delivery_report
-        )
-
-        producer.poll(0)
-
-        count += 1
-
-        if count % 50 == 0:
-            print(f"Streamed {count} live order events into Kafka...")
-
-        # Sends approximately 10 records per second
-        time.sleep(0.1)
-
-producer.flush()
-
-print(f"Completed streaming. Total records sent: {count}")
+streaming_query = (
+    parsed_transactions_df.writeStream
+    .format("delta")
+    .outputMode("append")
+    .trigger(availableNow=True)  # Native trigger mode for Serverless runs
+    .option("checkpointLocation", checkpoint_path)
+    .toTable("dbx_maven_market.bronze.raw_orders")
+)

@@ -1,4 +1,4 @@
-catalog: "dbx_maven_market"
+catalog: "maven_catalog"
 schemas:
   bronze: "bronze"
   silver: "silver"
@@ -6,8 +6,8 @@ schemas:
   audit: "audit"
 
 storage:
-  root_path: "abfss://uc-root@sgmavenmarket.dfs.core.windows.net"
-  checkpoint_path: "abfss://uc-root@sgmavenmarket.dfs.core.windows.net/checkpoints"
+  root_path: "abfss://uc-root@mavenstorageacc.dfs.core.windows.net"
+  checkpoint_path: "abfss://uc-root@mavenstorageacc.dfs.core.windows.net/checkpoints"
 
 ingestion:
   batch_csv_entities:

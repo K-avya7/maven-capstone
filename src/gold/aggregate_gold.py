@@ -2,7 +2,7 @@ import dlt
 from pyspark.sql.functions import col
 
 # Load dynamic configurations for 100% config-driven modularity
-CATALOG = spark.conf.get("pipeline.catalog", "dbx_maven_market")
+CATALOG = spark.conf.get("pipeline.catalog", "maven_catalog")
 SILVER_SCHEMA = spark.conf.get("pipeline.silver_schema", "silver")
 BRONZE_SCHEMA = spark.conf.get("pipeline.bronze_schema", "bronze")
 

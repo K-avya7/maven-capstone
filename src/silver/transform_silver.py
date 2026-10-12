@@ -2,7 +2,7 @@ import dlt
 from pyspark.sql.functions import col, lit, to_date, to_timestamp, concat_ws, coalesce
 
 # Load dynamic pipeline parameters
-CATALOG = spark.conf.get("pipeline.catalog", "dbx_maven_market")
+CATALOG = spark.conf.get("pipeline.catalog", "maven_catalog")
 BRONZE_SCHEMA = spark.conf.get("pipeline.bronze_schema", "bronze")
 
 # ==========================================

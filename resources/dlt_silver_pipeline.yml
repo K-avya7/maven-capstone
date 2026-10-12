@@ -2,7 +2,7 @@ resources:
   pipelines:
     maven_market_silver_dlt:
       name: maven_market_silver_pipeline
-      catalog: dbx_maven_market
+      catalog: maven_catalog
       schema: silver
       serverless: true
       libraries:

@@ -8,7 +8,7 @@ class CheckResult:
     passed: bool
     detail: str
 
-def run_abac_verification(spark: SparkSession, catalog: str = "dbx_maven_market"):
+def run_abac_verification(spark: SparkSession, catalog: str = "maven_catalog"):
     results: list[CheckResult] = []
 
     # ── 1. Governed tags applied to PII columns ──
@@ -116,6 +116,6 @@ def run_abac_verification(spark: SparkSession, catalog: str = "dbx_maven_market"
 @pytest.mark.remote
 def test_abac_verification(spark):
     """Executes the verification check against Unity Catalog."""
-    results = run_abac_verification(spark, catalog="dbx_maven_market")
+    results = run_abac_verification(spark, catalog="maven_catalog")
     failed = [r for r in results if not r.passed]
     assert len(failed) == 0, f"{len(failed)} ABAC verification checks failed."

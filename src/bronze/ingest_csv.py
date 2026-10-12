@@ -27,25 +27,30 @@ def load_config():
     if not os.path.exists(config_path):
         config_path = os.path.abspath(os.path.join(script_dir, "../../config/config.yml"))
 
-    try:
-        with open(config_path, "r") as f:
-            return yaml.safe_load(f)
-    except Exception:
-        return {
-            "catalog": "dbx_maven_market",
-            "schemas": {"bronze": "bronze"},
-            "storage": {
-                "root_path": "abfss://uc-root@sgmavenmarket.dfs.core.windows.net"
-            },
-            "ingestion": {
-                "batch_csv_entities": [
-                    {"folder": "transactions", "table": "transactions_1997"},
-                    {"folder": "regions", "table": "regions"},
-                    {"folder": "stores", "table": "stores"},
-                    {"folder": "calendar", "table": "calendar"},
-                ]
-            },
-        }
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r") as f:
+                return yaml.safe_load(f)
+        except Exception as e:
+            print(f"⚠️ Warning: Failed to parse YAML config at '{config_path}'. Error: {e}. Using fallback defaults.")
+    else:
+        print(f"⚠️ Warning: Config file not found at '{config_path}'. Using fallback defaults.")
+
+    return {
+        "catalog": "maven_catalog",
+        "schemas": {"bronze": "bronze"},
+        "storage": {
+            "root_path": "abfss://uc-root@mavenstorageacc.dfs.core.windows.net"
+        },
+        "ingestion": {
+            "batch_csv_entities": [
+                {"folder": "transactions", "table": "transactions"},
+                {"folder": "regions", "table": "regions"},
+                {"folder": "stores", "table": "stores"},
+                {"folder": "calendar", "table": "calendar"},
+            ]
+        },
+    }
 
 
 def ingest_adls_entity(
@@ -71,9 +76,11 @@ def ingest_adls_entity(
             .format("cloudFiles")
             .option("cloudFiles.format", "csv")
             .option("header", "true")
-            .option("inferSchema", "true")
+            # Replaced inferSchema with Auto Loader's inferColumnTypes option
+            .option("cloudFiles.inferColumnTypes", "true")
             .option("cloudFiles.schemaLocation", schema_path)
             .option("cloudFiles.schemaEvolutionMode", "addNewColumns")
+            .option("cloudFiles.useNotifications", "false")
             .load(landing_path)
         )
 
@@ -128,13 +135,13 @@ def run():
     logger = CentralLogger(spark)
     config = load_config()
 
-    catalog = config.get("catalog", "dbx_maven_market")
+    catalog = config.get("catalog", "maven_catalog")
     schema = config.get("schemas", {}).get("bronze", "bronze")
-    base_path = config.get("storage", {}).get("root_path", "abfss://uc-root@sgmavenmarket.dfs.core.windows.net")
+    base_path = config.get("storage", {}).get("root_path", "abfss://uc-root@mavenstorageacc.dfs.core.windows.net")
     entities_config = config.get("ingestion", {}).get(
         "batch_csv_entities",
         [
-            {"folder": "transactions", "table": "transactions_1997"},
+            {"folder": "transactions", "table": "transactions"},
             {"folder": "regions", "table": "regions"},
             {"folder": "stores", "table": "stores"},
             {"folder": "calendar", "table": "calendar"},
