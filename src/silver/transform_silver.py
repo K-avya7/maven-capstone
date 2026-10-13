@@ -2,7 +2,7 @@ import dlt
 from pyspark.sql.functions import col, lit, to_date, to_timestamp, concat_ws, coalesce
 
 # Load dynamic pipeline parameters
-CATALOG = spark.conf.get("pipeline.catalog", "dbx_maven_market")
+CATALOG = spark.conf.get("pipeline.catalog", "maven_catalog")
 BRONZE_SCHEMA = spark.conf.get("pipeline.bronze_schema", "bronze")
 
 # ==========================================
@@ -65,27 +65,38 @@ def view_bronze_inventory():
 @dlt.expect_or_drop("valid_transaction_id", "transaction_id IS NOT NULL")
 @dlt.expect_or_drop("valid_quantity", "quantity > 0")
 def silver_transactions():
-    batch_df = dlt.read("view_bronze_transactions_batch").select(
-        concat_ws("-", lit("batch"), col("store_id"), col("customer_id"), col("product_id"), col("transaction_date")).alias("transaction_id"),
-        col("customer_id").cast("string"),
-        col("product_id").cast("string"),
-        col("store_id").cast("string"),
-        col("quantity").cast("int"),
-        coalesce(to_timestamp(col("transaction_date")), to_date(col("transaction_date"))).alias("transaction_date"),
-        lit("BATCH_CSV").alias("source_type")
+    batch_df = (
+        dlt.read("view_bronze_transactions_batch")
+        .select(
+            concat_ws("-", lit("batch"), col("store_id"), col("customer_id"), col("product_id"), col("transaction_date")).alias("transaction_id"),
+            col("customer_id").cast("string"),
+            col("product_id").cast("string"),
+            col("store_id").cast("string"),
+            col("quantity").cast("int"),
+            coalesce(to_timestamp(col("transaction_date")), to_date(col("transaction_date"))).alias("transaction_date"),
+            lit("BATCH_CSV").alias("source_type")
+        )
+        .dropDuplicates(["transaction_id"])
     )
     
-    stream_df = dlt.read("view_bronze_orders_stream").select(
-        concat_ws("-", lit("stream"), col("customer_id"), col("product_id"), col("transaction_date")).alias("transaction_id"),
-        col("customer_id").cast("string"),
-        col("product_id").cast("string"),
-        col("store_id").cast("string"),
-        col("quantity").cast("int"),
-        coalesce(to_timestamp(col("transaction_date")), to_date(col("transaction_date"))).alias("transaction_date"),
-        lit("KAFKA_STREAM").alias("source_type")
+    stream_bronze = dlt.read("view_bronze_orders_stream")
+    order_id_col = col("order_id") if "order_id" in stream_bronze.columns else concat_ws("-", lit("stream"), col("customer_id"), col("product_id"), col("transaction_date"))
+
+    stream_df = (
+        stream_bronze
+        .select(
+            order_id_col.cast("string").alias("transaction_id"),
+            col("customer_id").cast("string"),
+            col("product_id").cast("string"),
+            col("store_id").cast("string"),
+            col("quantity").cast("int"),
+            coalesce(to_timestamp(col("transaction_date")), to_date(col("transaction_date"))).alias("transaction_date"),
+            lit("KAFKA_STREAM").alias("source_type")
+        )
+        .dropDuplicates(["transaction_id"])
     )
     
-    return batch_df.unionByName(stream_df)
+    return batch_df.unionByName(stream_df).dropDuplicates(["transaction_id"])
 
 
 # --- STORES & REGIONS DENORMALIZATION ---
@@ -95,21 +106,25 @@ def silver_transactions():
     table_properties={"quality": "silver"}
 )
 def silver_stores():
-    stores_df = dlt.read("view_bronze_stores")
-    regions_df = dlt.read("view_bronze_regions")
+    stores_df = dlt.read("view_bronze_stores").dropDuplicates(["store_id"])
+    regions_df = dlt.read("view_bronze_regions").dropDuplicates(["region_id"])
     
-    return stores_df.join(regions_df, "region_id", "left").select(
-        col("store_id").cast("string"),
-        col("region_id").cast("string"),
-        col("store_type"),
-        col("store_name"),
-        col("store_city"),
-        col("store_state"),
-        col("store_country"),
-        col("sales_region"),
-        col("sales_district"),
-        col("total_sqft").cast("int"),
-        col("grocery_sqft").cast("int")
+    return (
+        stores_df.join(regions_df, "region_id", "left")
+        .select(
+            col("store_id").cast("string"),
+            col("region_id").cast("string"),
+            col("store_type"),
+            col("store_name"),
+            col("store_city"),
+            col("store_state"),
+            col("store_country"),
+            col("sales_region"),
+            col("sales_district"),
+            col("total_sqft").cast("int"),
+            col("grocery_sqft").cast("int")
+        )
+        .dropDuplicates(["store_id"])
     )
 
 
@@ -121,11 +136,15 @@ def silver_stores():
 )
 @dlt.expect_or_drop("valid_return_quantity", "quantity > 0")
 def silver_returns():
-    return dlt.read("view_bronze_returns").select(
-        coalesce(to_timestamp(col("return_date")), to_date(col("return_date"))).alias("return_date"),
-        col("product_id").cast("string"),
-        col("store_id").cast("string"),
-        col("quantity").cast("int")
+    return (
+        dlt.read("view_bronze_returns")
+        .select(
+            coalesce(to_timestamp(col("return_date")), to_date(col("return_date"))).alias("return_date"),
+            col("product_id").cast("string"),
+            col("store_id").cast("string"),
+            col("quantity").cast("int")
+        )
+        .dropDuplicates()
     )
 
 
@@ -136,12 +155,19 @@ def silver_returns():
     table_properties={"quality": "silver"}
 )
 def silver_inventory():
-    return dlt.read("view_bronze_inventory").select(
-        coalesce(to_timestamp(col("inventory_date")), to_date(col("inventory_date"))).alias("inventory_date"),
-        col("store_id").cast("string"),
-        col("product_id").cast("string"),
-        col("stock_on_hand").cast("int"),
-        col("reorder_flag").cast("int")
+    inv_df = dlt.read("view_bronze_inventory")
+    date_col = col("inventory_date") if "inventory_date" in inv_df.columns else col("stock_date")
+
+    return (
+        inv_df
+        .select(
+            coalesce(to_timestamp(date_col), to_date(date_col)).alias("inventory_date"),
+            col("store_id").cast("string"),
+            col("product_id").cast("string"),
+            col("stock_on_hand").cast("int"),
+            col("reorder_flag").cast("int")
+        )
+        .dropDuplicates(["store_id", "product_id", "inventory_date"])
     )
 
 

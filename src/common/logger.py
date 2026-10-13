@@ -13,7 +13,7 @@ from pyspark.sql.types import (
 
 
 class CentralLogger:
-    def __init__(self, spark: SparkSession, audit_table: str = "dbx_maven_market.audit.audit_logs"):
+    def __init__(self, spark: SparkSession, audit_table: str = "maven_catalog.audit.audit_logs"):
         self.spark = spark
         self.audit_table = audit_table
 

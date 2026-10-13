@@ -1,4 +1,4 @@
-catalog: "dbx_maven_market"
+catalog: "maven_catalog"
 schemas:
   bronze: "bronze"
   silver: "silver"
@@ -6,8 +6,22 @@ schemas:
   audit: "audit"
 
 storage:
-  root_path: "abfss://uc-root@sgmavenmarket.dfs.core.windows.net"
-  checkpoint_path: "abfss://uc-root@sgmavenmarket.dfs.core.windows.net/checkpoints"
+  root_path: "abfss://uc-root@mavenstorageacc.dfs.core.windows.net"
+  checkpoint_path: "abfss://uc-root@mavenstorageacc.dfs.core.windows.net/checkpoints"
+
+kafka:
+  bootstrap_servers: "pkc-w77k7w.centralus.azure.confluent.cloud:9092"
+  secret_scope: "maven-secrets"
+  api_key_secret: "kafka-api-key"
+  api_secret_secret: "kafka-api-secret"
+
+
+mongodb:
+  cluster_host: "cluster0.sfjjdaf.mongodb.net"
+  database: "mavenmarket"
+  user: "maven_admin"
+  secret_scope: "maven-secrets"
+  secret_key: "mongodb-password"
 
 ingestion:
   batch_csv_entities:
@@ -19,6 +33,26 @@ ingestion:
       table: "stores"
     - folder: "calendar"
       table: "calendar"
+  mongodb_collections:
+    - collection: "products"
+      table: "raw_products"
+      task_name: "raw_products"
+      source_system: "MongoDB Atlas - Products Master"
+    - collection: "customers"
+      table: "raw_customers"
+      task_name: "raw_customers"
+      source_system: "MongoDB Atlas - Customers Master"
+  kafka_topics:
+    - topic: "order-stream-v2"
+      table: "raw_orders"
+      task_name: "raw_orders"
+      checkpoint_path: "/Volumes/maven_catalog/default/my_volume/checkpoints/order_stream_v2/"
+      schema: "transaction_date STRING, stock_date STRING, product_id INT, customer_id INT, store_id INT, quantity INT"
+    - topic: "inventory-stream-v2"
+      table: "raw_inventory"
+      task_name: "raw_inventory"
+      checkpoint_path: "/Volumes/maven_catalog/default/my_volume/checkpoints/inventory_stream_v2/"
+      schema: "inventory_date STRING, store_id INT, product_id INT, stock_on_hand INT, reorder_flag INT"
 
 quality_expectations:
   transactions:

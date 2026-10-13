@@ -2,9 +2,6 @@ resources:
   jobs:
     maven_market_etl_workflow:
       name: Maven_Market_ETL_Orchestrator
-      schedule:
-        quartz_cron_expression: "0 0 2 * * ?"
-        timezone_id: "UTC"
 
       environments:
         - environment_key: default
@@ -13,6 +10,7 @@ resources:
             dependencies:
               - pymongo
               - pandas
+              - pytest
 
       tasks:
         - task_key: ingest_batch_csv
@@ -50,6 +48,11 @@ resources:
           environment_key: default
           spark_python_task:
             python_file: ../src/common/log_dlt_metrics.py
+            parameters:
+              - "--pipeline_id"
+              - "${resources.pipelines.maven_market_gold_dlt.id}"
+              - "--pipeline_name"
+              - "maven_market_gold_dlt"
 
         - task_key: verify_abac_governance
           depends_on:

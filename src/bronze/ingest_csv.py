@@ -22,30 +22,45 @@ from pyspark.sql.functions import current_timestamp, col
 from src.common.logger import CentralLogger
 
 
-def load_config():
-    config_path = os.environ.get("CONFIG_PATH", "config/config.yml")
-    if not os.path.exists(config_path):
-        config_path = os.path.abspath(os.path.join(script_dir, "../../config/config.yml"))
+def get_config_path() -> str:
+    """Resolves config path from Databricks widgets, environment variables, or local workspace paths."""
+    try:
+        from pyspark.dbutils import DBUtils
+        spark = SparkSession.builder.getOrCreate()
+        dbutils = DBUtils(spark)
+        widget_path = dbutils.widgets.get("config_path")
+        if widget_path and os.path.exists(widget_path):
+            return widget_path
+    except Exception:
+        pass
 
+    env_path = os.environ.get("CONFIG_PATH")
+    if env_path and os.path.exists(env_path):
+        return env_path
+
+    default_paths = [
+        "config/config.yml",
+        os.path.abspath(os.path.join(script_dir, "../../config/config.yml")),
+        os.path.abspath(os.path.join(script_dir, "../config/config.yml")),
+    ]
+    for p in default_paths:
+        if os.path.exists(p):
+            return p
+
+    raise FileNotFoundError("CRITICAL: Configuration file 'config.yml' could not be located.")
+
+
+def load_config() -> dict:
+    config_path = get_config_path()
     try:
         with open(config_path, "r") as f:
-            return yaml.safe_load(f)
-    except Exception:
-        return {
-            "catalog": "dbx_maven_market",
-            "schemas": {"bronze": "bronze"},
-            "storage": {
-                "root_path": "abfss://uc-root@sgmavenmarket.dfs.core.windows.net"
-            },
-            "ingestion": {
-                "batch_csv_entities": [
-                    {"folder": "transactions", "table": "transactions_1997"},
-                    {"folder": "regions", "table": "regions"},
-                    {"folder": "stores", "table": "stores"},
-                    {"folder": "calendar", "table": "calendar"},
-                ]
-            },
-        }
+            config = yaml.safe_load(f)
+            if not config:
+                raise ValueError(f"Config file at '{config_path}' is empty.")
+            return config
+    except Exception as e:
+        print(f"❌ Error loading YAML config at '{config_path}': {e}")
+        raise e
 
 
 def ingest_adls_entity(
@@ -56,47 +71,39 @@ def ingest_adls_entity(
     catalog: str,
     schema: str,
     base_path: str,
+    checkpoint_base_path: str,
 ):
     start_time = datetime.now(timezone.utc)
     pipeline_name = "bronze_adls_ingestion"
     target_table = f"{catalog}.{schema}.{target_table_name}"
-
-    landing_path = f"{base_path}/landing/{entity_folder}/"
-    schema_path = f"{base_path}/schemas/{entity_folder}/"
-    checkpoint_path = f"{base_path}/checkpoints/{entity_folder}/"
+    landing_path = f"{base_path.rstrip('/')}/landing/{entity_folder}/"
 
     try:
-        df_stream = (
-            spark.readStream
-            .format("cloudFiles")
-            .option("cloudFiles.format", "csv")
+        # Batch read static CSV files
+        df_batch = (
+            spark.read
+            .format("csv")
             .option("header", "true")
             .option("inferSchema", "true")
-            .option("cloudFiles.schemaLocation", schema_path)
-            .option("cloudFiles.schemaEvolutionMode", "addNewColumns")
             .load(landing_path)
         )
 
         df_enriched = (
-            df_stream
+            df_batch
             .withColumn("ingestion_timestamp", current_timestamp())
             .withColumn("source_file", col("_metadata.file_path"))
         )
 
-        query = (
-            df_enriched.writeStream
+        # Batch overwrite Bronze Delta table
+        (
+            df_enriched.write
             .format("delta")
-            .outputMode("append")
-            .option("checkpointLocation", checkpoint_path)
-            .option("mergeSchema", "true")
-            .trigger(availableNow=True)
-            .toTable(target_table)
+            .mode("overwrite")
+            .option("overwriteSchema", "true")
+            .saveAsTable(target_table)
         )
-        query.awaitTermination()
 
-        records_processed = sum(
-            progress.get("numInputRows", 0) for progress in query.recentProgress
-        )
+        records_processed = df_enriched.count()
 
         logger.log_execution(
             pipeline_name=pipeline_name,
@@ -128,22 +135,15 @@ def run():
     logger = CentralLogger(spark)
     config = load_config()
 
-    catalog = config.get("catalog", "dbx_maven_market")
-    schema = config.get("schemas", {}).get("bronze", "bronze")
-    base_path = config.get("storage", {}).get("root_path", "abfss://uc-root@sgmavenmarket.dfs.core.windows.net")
-    entities_config = config.get("ingestion", {}).get(
-        "batch_csv_entities",
-        [
-            {"folder": "transactions", "table": "transactions_1997"},
-            {"folder": "regions", "table": "regions"},
-            {"folder": "stores", "table": "stores"},
-            {"folder": "calendar", "table": "calendar"},
-        ],
-    )
+    catalog = config["catalog"]
+    schema = config["schemas"]["bronze"]
+    base_path = config["storage"]["root_path"]
+    checkpoint_base_path = config["storage"].get("checkpoint_path", f"{base_path}/checkpoints")
+    entities_config = config["ingestion"]["batch_csv_entities"]
 
     for item in entities_config:
-        entity_folder = item.get("folder")
-        table_name = item.get("table")
+        entity_folder = item["folder"]
+        table_name = item["table"]
         print(f"\n--- Ingesting landing/{entity_folder}/ -> {catalog}.{schema}.{table_name} ---")
         ingest_adls_entity(
             spark=spark,
@@ -153,6 +153,7 @@ def run():
             catalog=catalog,
             schema=schema,
             base_path=base_path,
+            checkpoint_base_path=checkpoint_base_path,
         )
 
 
