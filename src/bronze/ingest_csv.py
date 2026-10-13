@@ -76,45 +76,34 @@ def ingest_adls_entity(
     start_time = datetime.now(timezone.utc)
     pipeline_name = "bronze_adls_ingestion"
     target_table = f"{catalog}.{schema}.{target_table_name}"
-
     landing_path = f"{base_path.rstrip('/')}/landing/{entity_folder}/"
-    schema_path = f"{checkpoint_base_path.rstrip('/')}/schemas/{entity_folder}/"
-    checkpoint_path = f"{checkpoint_base_path.rstrip('/')}/checkpoints/{entity_folder}/"
 
     try:
-        df_stream = (
-            spark.readStream
-            .format("cloudFiles")
-            .option("cloudFiles.format", "csv")
+        # Batch read static CSV files
+        df_batch = (
+            spark.read
+            .format("csv")
             .option("header", "true")
-            .option("cloudFiles.inferColumnTypes", "true")
-            .option("cloudFiles.schemaLocation", schema_path)
-            .option("cloudFiles.schemaEvolutionMode", "addNewColumns")
-            .option("cloudFiles.useNotifications", "false")
-            .option("pathGlobFilter", "*.csv")
+            .option("inferSchema", "true")
             .load(landing_path)
         )
 
         df_enriched = (
-            df_stream
+            df_batch
             .withColumn("ingestion_timestamp", current_timestamp())
             .withColumn("source_file", col("_metadata.file_path"))
         )
 
-        query = (
-            df_enriched.writeStream
+        # Batch overwrite Bronze Delta table
+        (
+            df_enriched.write
             .format("delta")
-            .outputMode("append")
-            .option("checkpointLocation", checkpoint_path)
-            .option("mergeSchema", "true")
-            .trigger(availableNow=True)
-            .toTable(target_table)
+            .mode("overwrite")
+            .option("overwriteSchema", "true")
+            .saveAsTable(target_table)
         )
-        query.awaitTermination()
 
-        records_processed = sum(
-            progress.get("numInputRows", 0) for progress in query.recentProgress
-        )
+        records_processed = df_enriched.count()
 
         logger.log_execution(
             pipeline_name=pipeline_name,

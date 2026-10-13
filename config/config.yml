@@ -43,15 +43,15 @@ ingestion:
       task_name: "raw_customers"
       source_system: "MongoDB Atlas - Customers Master"
   kafka_topics:
-    - topic: "order-stream"
+    - topic: "order-stream-v2"
       table: "raw_orders"
       task_name: "raw_orders"
-      checkpoint_path: "/Volumes/maven_catalog/default/my_volume/checkpoints/order_stream_v1/"
+      checkpoint_path: "/Volumes/maven_catalog/default/my_volume/checkpoints/order_stream_v2/"
       schema: "transaction_date STRING, stock_date STRING, product_id INT, customer_id INT, store_id INT, quantity INT"
-    - topic: "inventory-stream"
+    - topic: "inventory-stream-v2"
       table: "raw_inventory"
       task_name: "raw_inventory"
-      checkpoint_path: "/Volumes/maven_catalog/default/my_volume/checkpoints/inventory_stream_v1/"
+      checkpoint_path: "/Volumes/maven_catalog/default/my_volume/checkpoints/inventory_stream_v2/"
       schema: "inventory_date STRING, store_id INT, product_id INT, stock_on_hand INT, reorder_flag INT"
 
 quality_expectations:
