@@ -6,8 +6,8 @@ schemas:
   audit: "audit"
 
 storage:
-  root_path: "abfss://uc-root@mavenstorageacc1.dfs.core.windows.net"
-  checkpoint_path: "abfss://uc-root@mavenstorageacc1.dfs.core.windows.net/checkpoints"
+  root_path: "abfss://uc-root@mavenstorageacc2.dfs.core.windows.net"
+  checkpoint_path: "abfss://uc-root@mavenstorageacc2.dfs.core.windows.net/checkpoints"
 
 kafka:
   bootstrap_servers: "pkc-w77k7w.centralus.azure.confluent.cloud:9092"
