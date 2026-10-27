@@ -4,8 +4,21 @@
       "name": "d2374231",
       "displayName": "dim_stores",
       "config": {
+        "source": "maven_catalog.gold.dim_stores",
+        "measures": [
+          {
+            "name": "store_count",
+            "expr": "COUNT(DISTINCT store_id)",
+            "displayName": "Stores"
+          },
+          {
+            "name": "total_sqft",
+            "expr": "SUM(total_sqft)",
+            "displayName": "Total Sq Ft"
+          }
+        ],
+        "filter": "(country IS NULL OR array_contains(country, 'All') OR array_contains(country, store_country))",
         "version": "1.1",
-        "source": "dbx_maven_market.gold.dim_stores",
         "dimensions": [
           {
             "name": "store_id",
@@ -47,16 +60,11 @@
             "displayName": "Sales District"
           }
         ],
-        "measures": [
+        "parameters": [
           {
-            "name": "store_count",
-            "expr": "COUNT(DISTINCT store_id)",
-            "displayName": "Stores"
-          },
-          {
-            "name": "total_sqft",
-            "expr": "SUM(total_sqft)",
-            "displayName": "Total Sq Ft"
+            "name": "country",
+            "dataType": "ARRAY<STRING>",
+            "default": null
           }
         ]
       }
@@ -65,54 +73,70 @@
       "name": "6396f067",
       "displayName": "fact_inventory_snapshot",
       "config": {
-        "version": "1.1",
-        "source": "dbx_maven_market.gold.fact_inventory_snapshot",
-        "dimensions": [
-          {
-            "name": "inventory_day",
-            "expr": "CAST(inventory_date AS DATE)",
-            "displayName": "Inventory Date"
-          },
-          {
-            "name": "store_id",
-            "expr": "store_id",
-            "displayName": "Store"
-          },
-          {
-            "name": "product_id",
-            "expr": "product_id"
-          },
-          {
-            "name": "product_name",
-            "expr": "product_name",
-            "displayName": "Product"
-          },
-          {
-            "name": "data_region",
-            "expr": "data_region",
-            "displayName": "Region"
-          },
-          {
-            "name": "alert_status",
-            "expr": "CASE WHEN reorder_flag = 1 THEN 'Reorder Needed' ELSE 'OK' END",
-            "displayName": "Alert Status"
-          }
-        ],
+        "source": "maven_catalog.gold.fact_inventory_snapshot",
         "measures": [
           {
             "name": "stock_on_hand",
-            "expr": "SUM(stock_on_hand)",
+            "expr": "SUM(source.stock_on_hand)",
             "displayName": "Stock on Hand"
           },
           {
             "name": "alert_count",
-            "expr": "COUNT(1) FILTER (WHERE reorder_flag = 1)",
+            "expr": "COUNT(1) FILTER (WHERE source.reorder_flag = 1)",
             "displayName": "Inventory Alerts"
           },
           {
             "name": "products_at_risk",
-            "expr": "COUNT(DISTINCT product_id) FILTER (WHERE reorder_flag = 1)",
+            "expr": "COUNT(DISTINCT source.product_id) FILTER (WHERE source.reorder_flag = 1)",
             "displayName": "Products at Risk"
+          }
+        ],
+        "filter": "(country IS NULL OR array_contains(country, 'All') OR array_contains(country, stores.store_country))",
+        "version": "1.1",
+        "dimensions": [
+          {
+            "name": "inventory_day",
+            "expr": "CAST(source.inventory_date AS DATE)",
+            "displayName": "Inventory Date"
+          },
+          {
+            "name": "store_id",
+            "expr": "source.store_id",
+            "displayName": "Store"
+          },
+          {
+            "name": "product_id",
+            "expr": "source.product_id"
+          },
+          {
+            "name": "product_name",
+            "expr": "source.product_name",
+            "displayName": "Product"
+          },
+          {
+            "name": "data_region",
+            "expr": "source.data_region",
+            "displayName": "Region"
+          },
+          {
+            "name": "alert_status",
+            "expr": "CASE WHEN source.reorder_flag = 1 THEN 'Reorder Needed' ELSE 'OK' END",
+            "displayName": "Alert Status"
+          }
+        ],
+        "joins": [
+          {
+            "name": "stores",
+            "source": "maven_catalog.gold.dim_stores",
+            "on": "source.store_id = stores.store_id",
+            "cardinality": "many_to_one"
+          }
+        ],
+        "parameters": [
+          {
+            "name": "country",
+            "dataType": "ARRAY<STRING>",
+            "default": null
           }
         ]
       }
@@ -122,7 +146,7 @@
       "displayName": "fact_returns",
       "config": {
         "version": "1.1",
-        "source": "dbx_maven_market.gold.fact_returns",
+        "source": "maven_catalog.gold.fact_returns",
         "dimensions": [
           {
             "expr": "source.*"
@@ -132,7 +156,6 @@
           {
             "name": "count",
             "expr": "COUNT(*)",
-            "comment": "Represents the total number of rows in the dataset. Use this measure to count all",
             "displayName": "Count"
           }
         ]
@@ -142,7 +165,7 @@
       "name": "a4ef64bb",
       "displayName": "fact_sales",
       "config": {
-        "source": "dbx_maven_market.gold.fact_sales",
+        "source": "maven_catalog.gold.fact_sales",
         "measures": [
           {
             "name": "order_count",
@@ -289,6 +312,7 @@
             }
           }
         ],
+        "filter": "(country IS NULL OR array_contains(country, 'All') OR array_contains(country, stores.store_country))",
         "version": "1.1",
         "dimensions": [
           {
@@ -347,9 +371,22 @@
         "joins": [
           {
             "name": "products",
-            "source": "dbx_maven_market.gold.dim_products",
+            "source": "maven_catalog.gold.dim_products",
             "on": "source.product_id = products.product_id AND products.`__END_AT` IS NULL",
             "cardinality": "many_to_one"
+          },
+          {
+            "name": "stores",
+            "source": "maven_catalog.gold.dim_stores",
+            "on": "source.store_id = stores.store_id",
+            "cardinality": "many_to_one"
+          }
+        ],
+        "parameters": [
+          {
+            "name": "country",
+            "dataType": "ARRAY<STRING>",
+            "default": null
           }
         ]
       }
@@ -443,19 +480,26 @@
       "name": "e1d84343",
       "displayName": "dim_customers",
       "config": {
-        "version": "1.1",
         "source": "maven_catalog.gold.dim_customers",
+        "measures": [
+          {
+            "name": "count",
+            "expr": "COUNT(*)",
+            "displayName": "Count"
+          }
+        ],
+        "filter": "(country IS NULL OR array_contains(country, 'All') OR array_contains(country, customer_country))",
+        "version": "1.1",
         "dimensions": [
           {
             "expr": "source.*"
           }
         ],
-        "measures": [
+        "parameters": [
           {
-            "name": "count",
-            "expr": "COUNT(*)",
-            "comment": "Represents the total number of rows in the dataset. Use this measure to count all",
-            "displayName": "Count"
+            "name": "country",
+            "dataType": "ARRAY<STRING>",
+            "default": null
           }
         ]
       }
@@ -523,6 +567,62 @@
         "version": "1.1",
         "source": "maven_catalog.gold.sales_analytics_summary"
       }
+    },
+    {
+      "name": "country_options",
+      "displayName": "Country Filter Options",
+      "queryLines": [
+        "SELECT\n",
+        "  'All' AS country\n",
+        "UNION ALL\n",
+        "SELECT\n",
+        "  'Canada' AS country\n",
+        "UNION ALL\n",
+        "SELECT\n",
+        "  'USA' AS country\n",
+        "UNION ALL\n",
+        "SELECT\n",
+        "  'Mexico' AS country"
+      ]
+    },
+    {
+      "name": "access_status",
+      "displayName": "Access Status",
+      "queryLines": [
+        "SELECT\n",
+        "  CASE\n",
+        "    WHEN\n",
+        "      :country IS NULL\n",
+        "      OR array_contains(:country, 'All')\n",
+        "    THEN\n",
+        "      'All accessible data shown for your assigned region'\n",
+        "    WHEN\n",
+        "      EXISTS (\n",
+        "        SELECT\n",
+        "          1\n",
+        "        FROM\n",
+        "          maven_catalog.audit.user_country_mapping m\n",
+        "        WHERE\n",
+        "          m.user_email = current_user()\n",
+        "          AND array_contains(:country, m.assigned_country)\n",
+        "      )\n",
+        "    THEN\n",
+        "      CONCAT('✓ Authorized: Showing data for selected countries')\n",
+        "    ELSE\n",
+        "      CONCAT(\n",
+        "        '⚠ Access Denied: You are not assigned to the selected countries. Please select your assigned country.'\n",
+        "      )\n",
+        "  END AS access_status"
+      ],
+      "parameters": [
+        {
+          "displayName": "Country",
+          "keyword": "country",
+          "dataType": "STRING",
+          "complexType": "MULTI",
+          "defaultSelection": {}
+        }
+      ]
     }
   ],
   "relationshipGraphs": [
@@ -591,6 +691,14 @@
         {
           "name": "sales_analytics_summary",
           "datasetName": "a1eeb037"
+        },
+        {
+          "name": "Country_Filter_Options",
+          "datasetName": "country_options"
+        },
+        {
+          "name": "Access_Status",
+          "datasetName": "access_status"
         }
       ],
       "relationships": [
@@ -599,6 +707,13 @@
           "from": "fact_sales",
           "to": "dim_stores",
           "on": "`fact_sales`.`store_id` = `dim_stores`.`store_id`",
+          "cardinality": "CARDINALITY_MANY_TO_ONE"
+        },
+        {
+          "name": "relationship_1",
+          "from": "fact_sales",
+          "to": "dim_customers",
+          "on": "`fact_sales`.`customer_id` = `dim_customers`.`customer_id`",
           "cardinality": "CARDINALITY_MANY_TO_ONE"
         }
       ]
@@ -611,16 +726,34 @@
       "layout": [
         {
           "widget": {
-            "name": "kpi_revenue",
+            "name": "header",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# Maven Market Analytics\n",
+                "Real-time business intelligence powered by Unity Catalog governance\n",
+                "\n",
+                "🔒 **RBAC + ABAC Active** — Row-level security filters data by your assigned country. PII columns are masked for non-exempt users."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "rev_counter",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "a4ef64bb",
                   "fields": [
                     {
-                      "name": "measure(total_revenue)",
-                      "expression": "MEASURE(`total_revenue`)"
+                      "name": "measure(fact_sales__total_revenue)",
+                      "expression": "MEASURE(`fact_sales`.`total_revenue`)"
                     }
                   ],
                   "disaggregated": false
@@ -636,7 +769,8 @@
               "widgetType": "counter",
               "encodings": {
                 "value": {
-                  "fieldName": "measure(total_revenue)"
+                  "fieldName": "measure(fact_sales__total_revenue)",
+                  "rowNumber": 0
                 }
               },
               "data": {
@@ -646,23 +780,106 @@
           },
           "position": {
             "x": 0,
-            "y": 0,
-            "width": 4,
-            "height": 4
+            "y": 2,
+            "width": 3,
+            "height": 3
           }
         },
         {
           "widget": {
-            "name": "kpi_margin",
+            "name": "profit_counter",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "a4ef64bb",
                   "fields": [
                     {
-                      "name": "measure(profit_margin)",
-                      "expression": "MEASURE(`profit_margin`)"
+                      "name": "measure(fact_sales__total_profit)",
+                      "expression": "MEASURE(`fact_sales`.`total_profit`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Total Profit"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(fact_sales__total_profit)",
+                  "rowNumber": 0
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "orders_counter",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "measure(fact_sales__order_count)",
+                      "expression": "MEASURE(`fact_sales`.`order_count`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Total Orders"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(fact_sales__order_count)",
+                  "rowNumber": 0
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 2,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "margin_counter",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "measure(fact_sales__profit_margin)",
+                      "expression": "MEASURE(`fact_sales`.`profit_margin`)"
                     }
                   ],
                   "disaggregated": false
@@ -678,7 +895,8 @@
               "widgetType": "counter",
               "encodings": {
                 "value": {
-                  "fieldName": "measure(profit_margin)"
+                  "fieldName": "measure(fact_sales__profit_margin)",
+                  "rowNumber": 0
                 }
               },
               "data": {
@@ -687,15 +905,78 @@
             }
           },
           "position": {
-            "x": 4,
-            "y": 0,
-            "width": 4,
-            "height": 4
+            "x": 9,
+            "y": 2,
+            "width": 3,
+            "height": 3
           }
         },
         {
           "widget": {
-            "name": "kpi_yoy",
+            "name": "rev_trend",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "fact_sales__transaction_month",
+                      "expression": "`fact_sales`.`transaction_month`"
+                    },
+                    {
+                      "name": "measure(fact_sales__total_revenue)",
+                      "expression": "MEASURE(`fact_sales`.`total_revenue`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Revenue Trend"
+              },
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "fact_sales__transaction_month",
+                  "displayName": "transaction_month",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "measure(fact_sales__total_revenue)",
+                  "displayName": "total_revenue",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "fact_sales__transaction_month",
+                  "displayName": "transaction_month",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 8,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "growth_wow",
             "queries": [
               {
                 "name": "main_query",
@@ -719,7 +1000,606 @@
               "widgetType": "counter",
               "encodings": {
                 "value": {
-                  "fieldName": "measure(fact_sales__wow_growth)"
+                  "fieldName": "measure(fact_sales__wow_growth)",
+                  "rowNumber": 0
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 8,
+            "y": 5,
+            "width": 4,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "growth_mom",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "measure(fact_sales__mom_growth)",
+                      "expression": "MEASURE(`fact_sales`.`mom_growth`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "MoM Growth"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(fact_sales__mom_growth)",
+                  "rowNumber": 0
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 8,
+            "y": 8,
+            "width": 4,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "rev_by_brand",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "fact_sales__product_brand",
+                      "expression": "`fact_sales`.`product_brand`"
+                    },
+                    {
+                      "name": "measure(fact_sales__total_revenue)",
+                      "expression": "MEASURE(`fact_sales`.`total_revenue`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Revenue by Brand"
+              },
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "fact_sales__product_brand",
+                  "displayName": "product_brand",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "measure(fact_sales__total_revenue)",
+                  "displayName": "total_revenue",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "fact_sales__product_brand",
+                  "displayName": "product_brand",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 12,
+            "width": 6,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "top_products",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "fact_sales__product_name",
+                      "expression": "`fact_sales`.`product_name`"
+                    },
+                    {
+                      "name": "fact_sales__product_brand",
+                      "expression": "`fact_sales`.`product_brand`"
+                    },
+                    {
+                      "name": "measure(fact_sales__order_count)",
+                      "expression": "MEASURE(`fact_sales`.`order_count`)"
+                    },
+                    {
+                      "name": "measure(fact_sales__total_revenue)",
+                      "expression": "MEASURE(`fact_sales`.`total_revenue`)"
+                    },
+                    {
+                      "name": "measure(fact_sales__total_profit)",
+                      "expression": "MEASURE(`fact_sales`.`total_profit`)"
+                    },
+                    {
+                      "name": "measure(fact_sales__profit_margin)",
+                      "expression": "MEASURE(`fact_sales`.`profit_margin`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Top Products"
+              },
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "fact_sales__product_name"
+                  },
+                  {
+                    "fieldName": "fact_sales__product_brand"
+                  },
+                  {
+                    "fieldName": "measure(fact_sales__order_count)"
+                  },
+                  {
+                    "fieldName": "measure(fact_sales__total_revenue)"
+                  },
+                  {
+                    "fieldName": "measure(fact_sales__total_profit)"
+                  },
+                  {
+                    "fieldName": "measure(fact_sales__profit_margin)"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 12,
+            "width": 6,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "rev_pie",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "measure(fact_sales__total_revenue)",
+                      "expression": "MEASURE(`fact_sales`.`total_revenue`)"
+                    },
+                    {
+                      "name": "fact_sales__product_brand",
+                      "expression": "`fact_sales`.`product_brand`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Revenue by Product"
+              },
+              "version": 3,
+              "widgetType": "pie",
+              "encodings": {
+                "angle": {
+                  "fieldName": "measure(fact_sales__total_revenue)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "total_revenue"
+                },
+                "color": {
+                  "fieldName": "fact_sales__product_brand",
+                  "displayName": "product_brand",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 19,
+            "width": 4,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "orders_bar",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "fact_sales__product_brand",
+                      "expression": "`fact_sales`.`product_brand`"
+                    },
+                    {
+                      "name": "measure(fact_sales__order_count)",
+                      "expression": "MEASURE(`fact_sales`.`order_count`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Orders by Brand"
+              },
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "fact_sales__product_brand",
+                  "displayName": "product_brand",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "measure(fact_sales__order_count)",
+                  "displayName": "order_count",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "fact_sales__product_brand",
+                  "displayName": "product_brand",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 19,
+            "width": 4,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "profit_pie",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "measure(fact_sales__total_profit)",
+                      "expression": "MEASURE(`fact_sales`.`total_profit`)"
+                    },
+                    {
+                      "name": "fact_sales__product_brand",
+                      "expression": "`fact_sales`.`product_brand`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Profit by Brand"
+              },
+              "version": 3,
+              "widgetType": "pie",
+              "encodings": {
+                "angle": {
+                  "fieldName": "measure(fact_sales__total_profit)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "total_profit"
+                },
+                "color": {
+                  "fieldName": "fact_sales__product_brand",
+                  "displayName": "product_brand",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 8,
+            "y": 19,
+            "width": 4,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "weekly_trend",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "fact_sales__transaction_week",
+                      "expression": "`fact_sales`.`transaction_week`"
+                    },
+                    {
+                      "name": "measure(fact_sales__units_sold)",
+                      "expression": "MEASURE(`fact_sales`.`units_sold`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Weekly Revenue Trend"
+              },
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "fact_sales__transaction_week",
+                  "displayName": "transaction_week",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "measure(fact_sales__units_sold)",
+                  "displayName": "units_sold",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "fact_sales__transaction_week",
+                  "displayName": "transaction_week",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 26,
+            "width": 12,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "access_status",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "Access_Status__access_status",
+                      "expression": "`Access_Status`.`access_status`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Access Status"
+              },
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "Access_Status__access_status"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 32,
+            "width": 12,
+            "height": 2
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    },
+    {
+      "name": "f00c2200",
+      "displayName": "Real-Time Ops",
+      "layout": [
+        {
+          "widget": {
+            "name": "inv_alerts",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "measure(fact_inventory_snapshot__alert_count)",
+                      "expression": "MEASURE(`fact_inventory_snapshot`.`alert_count`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Inventory Alerts"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(fact_inventory_snapshot__alert_count)",
+                  "rowNumber": 0
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 4,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "prod_risk",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "measure(fact_inventory_snapshot__products_at_risk)",
+                      "expression": "MEASURE(`fact_inventory_snapshot`.`products_at_risk`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Products at Risk"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(fact_inventory_snapshot__products_at_risk)",
+                  "rowNumber": 0
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 0,
+            "width": 4,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "stock_counter",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "measure(fact_inventory_snapshot__stock_on_hand)",
+                      "expression": "MEASURE(`fact_inventory_snapshot`.`stock_on_hand`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Stock on Hand"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(fact_inventory_snapshot__stock_on_hand)",
+                  "rowNumber": 0
                 }
               },
               "data": {
@@ -736,25 +1616,31 @@
         },
         {
           "widget": {
-            "name": "monthly_revenue_trend",
+            "name": "reorder_table",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "a4ef64bb",
                   "fields": [
                     {
-                      "name": "transaction_month",
-                      "expression": "`transaction_month`"
+                      "name": "fact_inventory_snapshot__product_name",
+                      "expression": "`fact_inventory_snapshot`.`product_name`"
                     },
                     {
-                      "name": "measure(total_revenue)",
-                      "expression": "MEASURE(`total_revenue`)"
-                    }
-                  ],
-                  "filters": [
+                      "name": "fact_inventory_snapshot__store_id",
+                      "expression": "`fact_inventory_snapshot`.`store_id`"
+                    },
                     {
-                      "expression": "`transaction_month` IS NOT NULL"
+                      "name": "fact_inventory_snapshot__data_region",
+                      "expression": "`fact_inventory_snapshot`.`data_region`"
+                    },
+                    {
+                      "name": "measure(fact_inventory_snapshot__stock_on_hand)",
+                      "expression": "MEASURE(`fact_inventory_snapshot`.`stock_on_hand`)"
+                    },
+                    {
+                      "name": "measure(fact_inventory_snapshot__alert_count)",
+                      "expression": "MEASURE(`fact_inventory_snapshot`.`alert_count`)"
                     }
                   ],
                   "disaggregated": false
@@ -765,25 +1651,30 @@
               "frame": {
                 "showTitle": true,
                 "title": {
-                  "value": "Monthly Revenue Trend",
+                  "value": "Products Needing Reorder",
                   "fields": []
                 }
               },
-              "version": 3,
-              "widgetType": "line",
+              "version": 2,
+              "widgetType": "table",
               "encodings": {
-                "x": {
-                  "fieldName": "transaction_month",
-                  "scale": {
-                    "type": "temporal"
+                "columns": [
+                  {
+                    "fieldName": "fact_inventory_snapshot__product_name"
+                  },
+                  {
+                    "fieldName": "fact_inventory_snapshot__store_id"
+                  },
+                  {
+                    "fieldName": "fact_inventory_snapshot__data_region"
+                  },
+                  {
+                    "fieldName": "measure(fact_inventory_snapshot__stock_on_hand)"
+                  },
+                  {
+                    "fieldName": "measure(fact_inventory_snapshot__alert_count)"
                   }
-                },
-                "y": {
-                  "fieldName": "measure(total_revenue)",
-                  "scale": {
-                    "type": "quantitative"
-                  }
-                }
+                ]
               },
               "data": {
                 "queryName": "main_query"
@@ -794,89 +1685,24 @@
             "x": 0,
             "y": 4,
             "width": 12,
-            "height": 8
-          }
-        }
-      ],
-      "pageType": "PAGE_TYPE_CANVAS",
-      "layoutVersion": "GRID_V1"
-    },
-    {
-      "name": "f00c2200",
-      "displayName": "Real-Time Ops",
-      "layout": [
-        {
-          "widget": {
-            "name": "orders_per_minute",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "a4ef64bb",
-                  "fields": [
-                    {
-                      "name": "transaction_minute",
-                      "expression": "`transaction_minute`"
-                    },
-                    {
-                      "name": "measure(order_count)",
-                      "expression": "MEASURE(`order_count`)"
-                    }
-                  ],
-                  "filters": [
-                    {
-                      "expression": "`transaction_minute` IS NOT NULL"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              }
-            ],
-            "spec": {
-              "frame": {
-                "showTitle": true,
-                "title": "Orders per Minute"
-              },
-              "version": 3,
-              "widgetType": "line",
-              "encodings": {
-                "x": {
-                  "fieldName": "transaction_minute",
-                  "scale": {
-                    "type": "temporal"
-                  }
-                },
-                "y": {
-                  "fieldName": "measure(order_count)",
-                  "scale": {
-                    "type": "quantitative"
-                  }
-                }
-              },
-              "data": {
-                "queryName": "main_query"
-              }
-            }
-          },
-          "position": {
-            "x": 0,
-            "y": 0,
-            "width": 12,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "alert_count",
+            "name": "orders_by_region",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "6396f067",
                   "fields": [
                     {
-                      "name": "measure(alert_count)",
-                      "expression": "MEASURE(`alert_count`)"
+                      "name": "measure(fact_inventory_snapshot__alert_count)",
+                      "expression": "MEASURE(`fact_inventory_snapshot`.`alert_count`)"
+                    },
+                    {
+                      "name": "fact_inventory_snapshot__data_region",
+                      "expression": "`fact_inventory_snapshot`.`data_region`"
                     }
                   ],
                   "disaggregated": false
@@ -886,13 +1712,24 @@
             "spec": {
               "frame": {
                 "showTitle": true,
-                "title": "Inventory Alerts"
+                "title": "Orders by Region"
               },
-              "version": 2,
-              "widgetType": "counter",
+              "version": 3,
+              "widgetType": "pie",
               "encodings": {
-                "value": {
-                  "fieldName": "measure(alert_count)"
+                "angle": {
+                  "fieldName": "measure(fact_inventory_snapshot__alert_count)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "alert_count"
+                },
+                "color": {
+                  "fieldName": "fact_inventory_snapshot__data_region",
+                  "displayName": "data_region",
+                  "scale": {
+                    "type": "categorical"
+                  }
                 }
               },
               "data": {
@@ -902,44 +1739,30 @@
           },
           "position": {
             "x": 0,
-            "y": 7,
+            "y": 11,
             "width": 4,
-            "height": 5
+            "height": 6
           }
         },
         {
           "widget": {
-            "name": "alert_table",
+            "name": "stock_by_product",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "6396f067",
                   "fields": [
                     {
-                      "name": "product_name",
-                      "expression": "`product_name`"
+                      "name": "fact_inventory_snapshot__data_region",
+                      "expression": "`fact_inventory_snapshot`.`data_region`"
                     },
                     {
-                      "name": "store_id",
-                      "expression": "`store_id`"
+                      "name": "fact_inventory_snapshot__product_name",
+                      "expression": "`fact_inventory_snapshot`.`product_name`"
                     },
                     {
-                      "name": "data_region",
-                      "expression": "`data_region`"
-                    },
-                    {
-                      "name": "measure(stock_on_hand)",
-                      "expression": "MEASURE(`stock_on_hand`)"
-                    },
-                    {
-                      "name": "measure(alert_count)",
-                      "expression": "MEASURE(`alert_count`)"
-                    }
-                  ],
-                  "filters": [
-                    {
-                      "expression": "`alert_status` IN ('Reorder Needed')"
+                      "name": "measure(fact_inventory_snapshot__stock_on_hand)",
+                      "expression": "MEASURE(`fact_inventory_snapshot`.`stock_on_hand`)"
                     }
                   ],
                   "disaggregated": false
@@ -949,28 +1772,32 @@
             "spec": {
               "frame": {
                 "showTitle": true,
-                "title": "Products Needing Reorder"
+                "title": "Stock by Product"
               },
-              "version": 2,
-              "widgetType": "table",
+              "version": 3,
+              "widgetType": "bar",
               "encodings": {
-                "columns": [
-                  {
-                    "fieldName": "product_name"
-                  },
-                  {
-                    "fieldName": "store_id"
-                  },
-                  {
-                    "fieldName": "data_region"
-                  },
-                  {
-                    "fieldName": "measure(stock_on_hand)"
-                  },
-                  {
-                    "fieldName": "measure(alert_count)"
+                "x": {
+                  "fieldName": "fact_inventory_snapshot__product_name",
+                  "displayName": "product_name",
+                  "scale": {
+                    "type": "categorical"
                   }
-                ]
+                },
+                "y": {
+                  "fieldName": "measure(fact_inventory_snapshot__stock_on_hand)",
+                  "displayName": "stock_on_hand",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "fact_inventory_snapshot__data_region",
+                  "displayName": "data_region",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
               },
               "data": {
                 "queryName": "main_query"
@@ -979,9 +1806,132 @@
           },
           "position": {
             "x": 4,
-            "y": 7,
+            "y": 11,
             "width": 8,
-            "height": 5
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "alerts_by_region",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "fact_inventory_snapshot__alert_status",
+                      "expression": "`fact_inventory_snapshot`.`alert_status`"
+                    },
+                    {
+                      "name": "fact_inventory_snapshot__data_region",
+                      "expression": "`fact_inventory_snapshot`.`data_region`"
+                    },
+                    {
+                      "name": "measure(fact_inventory_snapshot__alert_count)",
+                      "expression": "MEASURE(`fact_inventory_snapshot`.`alert_count`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Alerts by Region"
+              },
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "fact_inventory_snapshot__data_region",
+                  "displayName": "data_region",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "measure(fact_inventory_snapshot__alert_count)",
+                  "displayName": "alert_count",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "fact_inventory_snapshot__alert_status",
+                  "displayName": "alert_status",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 17,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "risk_pie",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "measure(fact_inventory_snapshot__products_at_risk)",
+                      "expression": "MEASURE(`fact_inventory_snapshot`.`products_at_risk`)"
+                    },
+                    {
+                      "name": "fact_inventory_snapshot__data_region",
+                      "expression": "`fact_inventory_snapshot`.`data_region`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Products at Risk by Region"
+              },
+              "version": 3,
+              "widgetType": "pie",
+              "encodings": {
+                "angle": {
+                  "fieldName": "measure(fact_inventory_snapshot__products_at_risk)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "products_at_risk"
+                },
+                "color": {
+                  "fieldName": "fact_inventory_snapshot__data_region",
+                  "displayName": "data_region",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 17,
+            "width": 6,
+            "height": 6
           }
         }
       ],
@@ -994,7 +1944,24 @@
       "layout": [
         {
           "widget": {
-            "name": "revenue_by_region",
+            "name": "abac_banner",
+            "multilineTextboxSpec": {
+              "lines": [
+                "### 🔒 ABAC Row-Level Security Active\n",
+                "Data filtered by your assigned country. Use the **Country** global filter to test access. Selecting a country you're not assigned to returns empty results — ABAC enforcement in action."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "region_bar",
             "queries": [
               {
                 "name": "main_query",
@@ -1005,8 +1972,8 @@
                       "expression": "`dim_stores`.`sales_region`"
                     },
                     {
-                      "name": "measure(fact_sales__total_revenue)",
-                      "expression": "MEASURE(`fact_sales`.`total_revenue`)"
+                      "name": "measure(dim_stores__total_sqft)",
+                      "expression": "MEASURE(`dim_stores`.`total_sqft`)"
                     }
                   ],
                   "disaggregated": false
@@ -1023,14 +1990,23 @@
               "encodings": {
                 "x": {
                   "fieldName": "dim_stores__sales_region",
+                  "displayName": "sales_region",
                   "scale": {
                     "type": "categorical"
                   }
                 },
                 "y": {
-                  "fieldName": "measure(fact_sales__total_revenue)",
+                  "fieldName": "measure(dim_stores__total_sqft)",
+                  "displayName": "total_sqft",
                   "scale": {
                     "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "dim_stores__sales_region",
+                  "displayName": "sales_region",
+                  "scale": {
+                    "type": "categorical"
                   }
                 }
               },
@@ -1041,14 +2017,14 @@
           },
           "position": {
             "x": 0,
-            "y": 0,
+            "y": 2,
             "width": 6,
             "height": 7
           }
         },
         {
           "widget": {
-            "name": "store_sales_table",
+            "name": "store_table",
             "queries": [
               {
                 "name": "main_query",
@@ -1059,24 +2035,28 @@
                       "expression": "`dim_stores`.`store_name`"
                     },
                     {
+                      "name": "dim_stores__store_city",
+                      "expression": "`dim_stores`.`store_city`"
+                    },
+                    {
                       "name": "dim_stores__store_state",
                       "expression": "`dim_stores`.`store_state`"
+                    },
+                    {
+                      "name": "dim_stores__store_country",
+                      "expression": "`dim_stores`.`store_country`"
                     },
                     {
                       "name": "dim_stores__sales_region",
                       "expression": "`dim_stores`.`sales_region`"
                     },
                     {
-                      "name": "measure(fact_sales__order_count)",
-                      "expression": "MEASURE(`fact_sales`.`order_count`)"
+                      "name": "dim_stores__store_type",
+                      "expression": "`dim_stores`.`store_type`"
                     },
                     {
-                      "name": "measure(fact_sales__total_revenue)",
-                      "expression": "MEASURE(`fact_sales`.`total_revenue`)"
-                    },
-                    {
-                      "name": "measure(fact_sales__profit_margin)",
-                      "expression": "MEASURE(`fact_sales`.`profit_margin`)"
+                      "name": "measure(dim_stores__total_sqft)",
+                      "expression": "MEASURE(`dim_stores`.`total_sqft`)"
                     }
                   ],
                   "disaggregated": false
@@ -1086,7 +2066,7 @@
             "spec": {
               "frame": {
                 "showTitle": true,
-                "title": "Store Sales Detail"
+                "title": "Store Performance"
               },
               "version": 2,
               "widgetType": "table",
@@ -1096,19 +2076,22 @@
                     "fieldName": "dim_stores__store_name"
                   },
                   {
+                    "fieldName": "dim_stores__store_city"
+                  },
+                  {
                     "fieldName": "dim_stores__store_state"
+                  },
+                  {
+                    "fieldName": "dim_stores__store_country"
                   },
                   {
                     "fieldName": "dim_stores__sales_region"
                   },
                   {
-                    "fieldName": "measure(fact_sales__order_count)"
+                    "fieldName": "dim_stores__store_type"
                   },
                   {
-                    "fieldName": "measure(fact_sales__total_revenue)"
-                  },
-                  {
-                    "fieldName": "measure(fact_sales__profit_margin)"
+                    "fieldName": "measure(dim_stores__total_sqft)"
                   }
                 ]
               },
@@ -1119,9 +2102,260 @@
           },
           "position": {
             "x": 6,
-            "y": 0,
+            "y": 2,
             "width": 6,
             "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "customer_tbl",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "measure(fact_sales__order_count)",
+                      "expression": "MEASURE(`fact_sales`.`order_count`)"
+                    },
+                    {
+                      "name": "dim_customers__first_name",
+                      "expression": "`dim_customers`.`first_name`"
+                    },
+                    {
+                      "name": "dim_customers__last_name",
+                      "expression": "`dim_customers`.`last_name`"
+                    },
+                    {
+                      "name": "dim_customers__customer_address",
+                      "expression": "`dim_customers`.`customer_address`"
+                    },
+                    {
+                      "name": "dim_customers__customer_city",
+                      "expression": "`dim_customers`.`customer_city`"
+                    },
+                    {
+                      "name": "dim_customers__customer_country",
+                      "expression": "`dim_customers`.`customer_country`"
+                    },
+                    {
+                      "name": "dim_customers__member_card",
+                      "expression": "`dim_customers`.`member_card`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Customer Details — ABAC Governed"
+              },
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "measure(fact_sales__order_count)"
+                  },
+                  {
+                    "fieldName": "dim_customers__first_name"
+                  },
+                  {
+                    "fieldName": "dim_customers__last_name"
+                  },
+                  {
+                    "fieldName": "dim_customers__customer_address"
+                  },
+                  {
+                    "fieldName": "dim_customers__customer_city"
+                  },
+                  {
+                    "fieldName": "dim_customers__customer_country"
+                  },
+                  {
+                    "fieldName": "dim_customers__member_card"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 9,
+            "width": 12,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "store_type_pie",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "measure(dim_stores__store_count)",
+                      "expression": "MEASURE(`dim_stores`.`store_count`)"
+                    },
+                    {
+                      "name": "dim_stores__store_type",
+                      "expression": "`dim_stores`.`store_type`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Store Type Distribution"
+              },
+              "version": 3,
+              "widgetType": "pie",
+              "encodings": {
+                "angle": {
+                  "fieldName": "measure(dim_stores__store_count)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "store_count"
+                },
+                "color": {
+                  "fieldName": "dim_stores__store_type",
+                  "displayName": "store_type",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 16,
+            "width": 4,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "sqft_bar",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "dim_stores__sales_region",
+                      "expression": "`dim_stores`.`sales_region`"
+                    },
+                    {
+                      "name": "dim_stores__sales_district",
+                      "expression": "`dim_stores`.`sales_district`"
+                    },
+                    {
+                      "name": "measure(dim_stores__total_sqft)",
+                      "expression": "MEASURE(`dim_stores`.`total_sqft`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Sq Ft by Sales District"
+              },
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "dim_stores__sales_district",
+                  "displayName": "sales_district",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "measure(dim_stores__total_sqft)",
+                  "displayName": "total_sqft",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "dim_stores__sales_region",
+                  "displayName": "sales_region",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 16,
+            "width": 8,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "access_status_regional",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "Access_Status__access_status",
+                      "expression": "`Access_Status`.`access_status`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Access Status"
+              },
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "Access_Status__access_status"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 22,
+            "width": 12,
+            "height": 2
           }
         }
       ],
@@ -1134,7 +2368,49 @@
       "layout": [
         {
           "widget": {
-            "name": "failed_updates",
+            "name": "update_count",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "measure(pipeline_health__update_count)",
+                      "expression": "MEASURE(`pipeline_health`.`update_count`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Pipeline Updates (30d)"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(pipeline_health__update_count)",
+                  "rowNumber": 0
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 3,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "failed_ctr",
             "queries": [
               {
                 "name": "main_query",
@@ -1152,13 +2428,14 @@
             "spec": {
               "frame": {
                 "showTitle": true,
-                "title": "Failed Pipeline Updates (30d)"
+                "title": "Failed Updates"
               },
               "version": 2,
               "widgetType": "counter",
               "encodings": {
                 "value": {
-                  "fieldName": "measure(pipeline_health__failed_updates)"
+                  "fieldName": "measure(pipeline_health__failed_updates)",
+                  "rowNumber": 0
                 }
               },
               "data": {
@@ -1167,15 +2444,15 @@
             }
           },
           "position": {
-            "x": 0,
+            "x": 3,
             "y": 0,
-            "width": 4,
-            "height": 5
+            "width": 3,
+            "height": 4
           }
         },
         {
           "widget": {
-            "name": "failure_rate",
+            "name": "fail_rate",
             "queries": [
               {
                 "name": "main_query",
@@ -1193,13 +2470,14 @@
             "spec": {
               "frame": {
                 "showTitle": true,
-                "title": "Update Failure Rate"
+                "title": "Failure Rate"
               },
               "version": 2,
               "widgetType": "counter",
               "encodings": {
                 "value": {
-                  "fieldName": "measure(pipeline_health__failure_rate)"
+                  "fieldName": "measure(pipeline_health__failure_rate)",
+                  "rowNumber": 0
                 }
               },
               "data": {
@@ -1208,15 +2486,15 @@
             }
           },
           "position": {
-            "x": 4,
+            "x": 6,
             "y": 0,
-            "width": 4,
-            "height": 5
+            "width": 3,
+            "height": 4
           }
         },
         {
           "widget": {
-            "name": "updates_by_state",
+            "name": "state_bar",
             "queries": [
               {
                 "name": "main_query",
@@ -1238,21 +2516,30 @@
             "spec": {
               "frame": {
                 "showTitle": true,
-                "title": "Updates by Result State"
+                "title": "Updates by State"
               },
               "version": 3,
               "widgetType": "bar",
               "encodings": {
                 "x": {
                   "fieldName": "pipeline_health__result_state",
+                  "displayName": "result_state",
                   "scale": {
                     "type": "categorical"
                   }
                 },
                 "y": {
                   "fieldName": "measure(pipeline_health__update_count)",
+                  "displayName": "update_count",
                   "scale": {
                     "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "pipeline_health__result_state",
+                  "displayName": "result_state",
+                  "scale": {
+                    "type": "categorical"
                   }
                 }
               },
@@ -1262,15 +2549,15 @@
             }
           },
           "position": {
-            "x": 8,
+            "x": 9,
             "y": 0,
-            "width": 4,
-            "height": 5
+            "width": 3,
+            "height": 4
           }
         },
         {
           "widget": {
-            "name": "pipeline_detail",
+            "name": "pipeline_tbl",
             "queries": [
               {
                 "name": "main_query",
@@ -1308,7 +2595,7 @@
             "spec": {
               "frame": {
                 "showTitle": true,
-                "title": "Pipeline Update Detail"
+                "title": "Pipeline Update History"
               },
               "version": 2,
               "widgetType": "table",
@@ -1341,13 +2628,216 @@
           },
           "position": {
             "x": 0,
-            "y": 5,
+            "y": 4,
             "width": 12,
-            "height": 7
+            "height": 8
+          }
+        },
+        {
+          "widget": {
+            "name": "updates_trend",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "fields": [
+                    {
+                      "name": "pipeline_health__result_state",
+                      "expression": "`pipeline_health`.`result_state`"
+                    },
+                    {
+                      "name": "pipeline_health__update_day",
+                      "expression": "`pipeline_health`.`update_day`"
+                    },
+                    {
+                      "name": "measure(pipeline_health__update_count)",
+                      "expression": "MEASURE(`pipeline_health`.`update_count`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Updates Over Time"
+              },
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "pipeline_health__update_day",
+                  "displayName": "update_day",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "measure(pipeline_health__update_count)",
+                  "displayName": "update_count",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "pipeline_health__result_state",
+                  "displayName": "result_state",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 12,
+            "width": 12,
+            "height": 6
           }
         }
       ],
       "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    },
+    {
+      "name": "global_filters",
+      "displayName": "Global Filters",
+      "layout": [
+        {
+          "widget": {
+            "name": "country_filter_multi",
+            "queries": [
+              {
+                "name": "dashboards/01f1c6c205861239acf2d7ebdcd6bd14/datasets/72c05e49c926424c934fb0023d6cc967_country",
+                "query": {
+                  "datasetName": "country_options",
+                  "fields": [
+                    {
+                      "name": "country",
+                      "expression": "`country`"
+                    },
+                    {
+                      "name": "country_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "parameter_dashboards/01f1c6c205861239acf2d7ebdcd6bd14/datasets/bdbb7fb6266143f5aaa673436943b93e_country",
+                "query": {
+                  "datasetName": "access_status",
+                  "parameters": [
+                    {
+                      "name": "country",
+                      "keyword": "country"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "parameter_dashboards/01f1c6c205861239acf2d7ebdcd6bd14/datasets/01f1c6c2058a1becab3e1b290de713b1_country",
+                "query": {
+                  "datasetName": "d2374231",
+                  "parameters": [
+                    {
+                      "name": "country",
+                      "keyword": "country"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "parameter_dashboards/01f1c6c205861239acf2d7ebdcd6bd14/datasets/30cac05cc2944aa5a4a80c4cb72ec5f6_country",
+                "query": {
+                  "datasetName": "e1d84343",
+                  "parameters": [
+                    {
+                      "name": "country",
+                      "keyword": "country"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "parameter_dashboards/01f1c6c205861239acf2d7ebdcd6bd14/datasets/01f1c6c2058a1bef9ffbd8304a252e4d_country",
+                "query": {
+                  "datasetName": "a4ef64bb",
+                  "parameters": [
+                    {
+                      "name": "country",
+                      "keyword": "country"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "parameter_dashboards/01f1c6c205861239acf2d7ebdcd6bd14/datasets/01f1c6c2058a1bed9789cedc9ba66486_country",
+                "query": {
+                  "datasetName": "6396f067",
+                  "parameters": [
+                    {
+                      "name": "country",
+                      "keyword": "country"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {},
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "country",
+                    "queryName": "dashboards/01f1c6c205861239acf2d7ebdcd6bd14/datasets/72c05e49c926424c934fb0023d6cc967_country"
+                  },
+                  {
+                    "parameterName": "country",
+                    "queryName": "parameter_dashboards/01f1c6c205861239acf2d7ebdcd6bd14/datasets/bdbb7fb6266143f5aaa673436943b93e_country"
+                  },
+                  {
+                    "parameterName": "country",
+                    "queryName": "parameter_dashboards/01f1c6c205861239acf2d7ebdcd6bd14/datasets/01f1c6c2058a1becab3e1b290de713b1_country"
+                  },
+                  {
+                    "parameterName": "country",
+                    "queryName": "parameter_dashboards/01f1c6c205861239acf2d7ebdcd6bd14/datasets/30cac05cc2944aa5a4a80c4cb72ec5f6_country"
+                  },
+                  {
+                    "parameterName": "country",
+                    "queryName": "parameter_dashboards/01f1c6c205861239acf2d7ebdcd6bd14/datasets/01f1c6c2058a1bef9ffbd8304a252e4d_country"
+                  },
+                  {
+                    "parameterName": "country",
+                    "queryName": "parameter_dashboards/01f1c6c205861239acf2d7ebdcd6bd14/datasets/01f1c6c2058a1bed9789cedc9ba66486_country"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 2
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_GLOBAL_FILTERS",
       "layoutVersion": "GRID_V1"
     }
   ],
