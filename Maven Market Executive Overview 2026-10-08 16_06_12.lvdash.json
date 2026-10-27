@@ -465,7 +465,20 @@
       "displayName": "analyst_return_insights",
       "config": {
         "version": "1.1",
-        "source": "maven_catalog.gold.analyst_return_insights"
+        "source": "maven_catalog.gold.analyst_return_insights",
+        "dimensions": [
+          {
+            "expr": "source.*"
+          }
+        ],
+        "measures": [
+          {
+            "name": "count",
+            "expr": "COUNT(*)",
+            "comment": "Represents the total number of rows in the dataset. Use this measure to count all",
+            "displayName": "Count"
+          }
+        ]
       }
     },
     {
@@ -473,7 +486,20 @@
       "displayName": "dim_calendar",
       "config": {
         "version": "1.1",
-        "source": "maven_catalog.gold.dim_calendar"
+        "source": "maven_catalog.gold.dim_calendar",
+        "dimensions": [
+          {
+            "expr": "source.*"
+          }
+        ],
+        "measures": [
+          {
+            "name": "count",
+            "expr": "COUNT(*)",
+            "comment": "Represents the total number of rows in the dataset. Use this measure to count all",
+            "displayName": "Count"
+          }
+        ]
       }
     },
     {
@@ -505,19 +531,24 @@
       }
     },
     {
-      "name": "0c116449",
-      "displayName": "dim_customers_secure",
-      "config": {
-        "version": "1.1",
-        "source": "maven_catalog.gold.dim_customers_secure"
-      }
-    },
-    {
       "name": "066128b4",
       "displayName": "dim_products",
       "config": {
         "version": "1.1",
-        "source": "maven_catalog.gold.dim_products"
+        "source": "maven_catalog.gold.dim_products",
+        "dimensions": [
+          {
+            "expr": "source.*"
+          }
+        ],
+        "measures": [
+          {
+            "name": "count",
+            "expr": "COUNT(*)",
+            "comment": "Represents the total number of rows in the dataset. Use this measure to count all",
+            "displayName": "Count"
+          }
+        ]
       }
     },
     {
@@ -525,15 +556,20 @@
       "displayName": "dim_stores",
       "config": {
         "version": "1.1",
-        "source": "maven_catalog.gold.dim_stores"
-      }
-    },
-    {
-      "name": "bc142e71",
-      "displayName": "dim_stores_secure",
-      "config": {
-        "version": "1.1",
-        "source": "maven_catalog.gold.dim_stores_secure"
+        "source": "maven_catalog.gold.dim_stores",
+        "dimensions": [
+          {
+            "expr": "source.*"
+          }
+        ],
+        "measures": [
+          {
+            "name": "count",
+            "expr": "COUNT(*)",
+            "comment": "Represents the total number of rows in the dataset. Use this measure to count all",
+            "displayName": "Count"
+          }
+        ]
       }
     },
     {
@@ -541,7 +577,20 @@
       "displayName": "fact_inventory_snapshot",
       "config": {
         "version": "1.1",
-        "source": "maven_catalog.gold.fact_inventory_snapshot"
+        "source": "maven_catalog.gold.fact_inventory_snapshot",
+        "dimensions": [
+          {
+            "expr": "source.*"
+          }
+        ],
+        "measures": [
+          {
+            "name": "count",
+            "expr": "COUNT(*)",
+            "comment": "Represents the total number of rows in the dataset. Use this measure to count all",
+            "displayName": "Count"
+          }
+        ]
       }
     },
     {
@@ -549,7 +598,20 @@
       "displayName": "fact_returns",
       "config": {
         "version": "1.1",
-        "source": "maven_catalog.gold.fact_returns"
+        "source": "maven_catalog.gold.fact_returns",
+        "dimensions": [
+          {
+            "expr": "source.*"
+          }
+        ],
+        "measures": [
+          {
+            "name": "count",
+            "expr": "COUNT(*)",
+            "comment": "Represents the total number of rows in the dataset. Use this measure to count all",
+            "displayName": "Count"
+          }
+        ]
       }
     },
     {
@@ -557,15 +619,20 @@
       "displayName": "fact_sales",
       "config": {
         "version": "1.1",
-        "source": "maven_catalog.gold.fact_sales"
-      }
-    },
-    {
-      "name": "a1eeb037",
-      "displayName": "sales_analytics_summary",
-      "config": {
-        "version": "1.1",
-        "source": "maven_catalog.gold.sales_analytics_summary"
+        "source": "maven_catalog.gold.fact_sales",
+        "dimensions": [
+          {
+            "expr": "source.*"
+          }
+        ],
+        "measures": [
+          {
+            "name": "count",
+            "expr": "COUNT(*)",
+            "comment": "Represents the total number of rows in the dataset. Use this measure to count all",
+            "displayName": "Count"
+          }
+        ]
       }
     },
     {
@@ -661,20 +728,12 @@
           "datasetName": "e1d84343"
         },
         {
-          "name": "dim_customers_secure",
-          "datasetName": "0c116449"
-        },
-        {
           "name": "dim_products",
           "datasetName": "066128b4"
         },
         {
           "name": "dim_stores_1",
           "datasetName": "934d834b"
-        },
-        {
-          "name": "dim_stores_secure",
-          "datasetName": "bc142e71"
         },
         {
           "name": "fact_inventory_snapshot_1",
@@ -687,10 +746,6 @@
         {
           "name": "fact_sales_1",
           "datasetName": "26f96b0c"
-        },
-        {
-          "name": "sales_analytics_summary",
-          "datasetName": "a1eeb037"
         },
         {
           "name": "Country_Filter_Options",
@@ -1508,7 +1563,10 @@
             "spec": {
               "frame": {
                 "showTitle": true,
-                "title": "Inventory Alerts"
+                "title": {
+                  "value": "Inventory Alerts",
+                  "fields": []
+                }
               },
               "version": 2,
               "widgetType": "counter",
