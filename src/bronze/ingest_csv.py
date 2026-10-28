@@ -59,7 +59,7 @@ def load_config() -> dict:
                 raise ValueError(f"Config file at '{config_path}' is empty.")
             return config
     except Exception as e:
-        print(f"❌ Error loading YAML config at '{config_path}': {e}")
+        print(f"Error loading YAML config at '{config_path}': {e}")
         raise e
 
 
@@ -128,7 +128,7 @@ def ingest_adls_entity(
             records_processed=records_processed,
             records_failed=0,
         )
-        print(f"✅ Auto Loader successfully ingested {records_processed} rows from 'landing/{entity_folder}/' into '{target_table}'.")
+        print(f"Successfully ingested {records_processed} rows from 'landing/{entity_folder}/' into '{target_table}'.")
 
     except Exception as e:
         logger.log_execution(
@@ -140,7 +140,7 @@ def ingest_adls_entity(
             records_failed=0,
             error=e,
         )
-        print(f"❌ Error during Auto Loader ingestion of '{entity_folder}': {str(e)}")
+        print(f"Error ingesting entity '{entity_folder}': {str(e)}")
         traceback.print_exc()
         raise e
 
