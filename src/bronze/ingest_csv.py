@@ -73,37 +73,52 @@ def ingest_adls_entity(
     base_path: str,
     checkpoint_base_path: str,
 ):
+    """
+    Ingests files from ADLS Gen2 using Databricks Auto Loader (cloudFiles).
+    Appends new records into Bronze Delta tables and tracks state incrementally via checkpoints.
+    """
     start_time = datetime.now(timezone.utc)
-    pipeline_name = "bronze_adls_ingestion"
+    pipeline_name = "bronze_adls_autoloader_ingestion"
     target_table = f"{catalog}.{schema}.{target_table_name}"
     landing_path = f"{base_path.rstrip('/')}/landing/{entity_folder}/"
+    checkpoint_location = f"{checkpoint_base_path.rstrip('/')}/{entity_folder}/cp"
+    schema_location = f"{checkpoint_base_path.rstrip('/')}/{entity_folder}/schema"
 
     try:
-        # Batch read static CSV files
-        df_batch = (
-            spark.read
-            .format("csv")
+        # Auto Loader streaming read with schema inference
+        df_stream = (
+            spark.readStream
+            .format("cloudFiles")
+            .option("cloudFiles.format", "csv")
+            .option("cloudFiles.schemaLocation", schema_location)
             .option("header", "true")
-            .option("inferSchema", "true")
+            .option("inferColumnTypes", "true")
             .load(landing_path)
         )
 
+        # Standardized Bronze metadata enrichment
         df_enriched = (
-            df_batch
-            .withColumn("ingestion_timestamp", current_timestamp())
-            .withColumn("source_file", col("_metadata.file_path"))
+            df_stream
+            .withColumn("_ingestion_timestamp", current_timestamp())
+            .withColumn("_source_file", col("_metadata.file_path"))
         )
 
-        # Batch overwrite Bronze Delta table
-        (
-            df_enriched.write
+        # Append-only streaming sink using availableNow trigger for batch-style execution
+        streaming_query = (
+            df_enriched.writeStream
             .format("delta")
-            .mode("overwrite")
-            .option("overwriteSchema", "true")
-            .saveAsTable(target_table)
+            .outputMode("append")
+            .trigger(availableNow=True)
+            .option("checkpointLocation", checkpoint_location)
+            .toTable(target_table)
         )
 
-        records_processed = df_enriched.count()
+        streaming_query.awaitTermination()
+
+        # Compute records processed from streaming progress telemetry
+        records_processed = sum(
+            progress.get("numInputRows", 0) for progress in streaming_query.recentProgress
+        )
 
         logger.log_execution(
             pipeline_name=pipeline_name,
@@ -113,7 +128,7 @@ def ingest_adls_entity(
             records_processed=records_processed,
             records_failed=0,
         )
-        print(f"✅ Successfully ingested {records_processed} rows from 'landing/{entity_folder}/' into '{target_table}'.")
+        print(f"✅ Auto Loader successfully ingested {records_processed} rows from 'landing/{entity_folder}/' into '{target_table}'.")
 
     except Exception as e:
         logger.log_execution(
@@ -125,13 +140,13 @@ def ingest_adls_entity(
             records_failed=0,
             error=e,
         )
-        print(f"❌ Error ingesting entity '{entity_folder}': {str(e)}")
+        print(f"❌ Error during Auto Loader ingestion of '{entity_folder}': {str(e)}")
         traceback.print_exc()
         raise e
 
 
 def run():
-    spark = SparkSession.builder.appName("IngestADLSBatch").getOrCreate()
+    spark = SparkSession.builder.appName("IngestADLSAutoLoader").getOrCreate()
     logger = CentralLogger(spark)
     config = load_config()
 
@@ -144,7 +159,7 @@ def run():
     for item in entities_config:
         entity_folder = item["folder"]
         table_name = item["table"]
-        print(f"\n--- Ingesting landing/{entity_folder}/ -> {catalog}.{schema}.{table_name} ---")
+        print(f"\n--- Ingesting landing/{entity_folder}/ via Auto Loader -> {catalog}.{schema}.{table_name} ---")
         ingest_adls_entity(
             spark=spark,
             logger=logger,

@@ -9,4 +9,4 @@ scratch/**
 **/explorations/**
 **/!explorations/README.md
 .vscode/
-kafka.py
+kafka_producer.py

@@ -1,9 +1,13 @@
 import dlt
 from pyspark.sql.functions import col, lit, to_date, to_timestamp, concat_ws, coalesce
 
-# Load dynamic pipeline parameters
+# Load dynamic pipeline configurations
 CATALOG = spark.conf.get("pipeline.catalog", "maven_catalog")
 BRONZE_SCHEMA = spark.conf.get("pipeline.bronze_schema", "bronze")
+
+# Dynamic expectations from pipeline parameters (fallback defaults provided)
+EXPECT_VALID_TX_ID = spark.conf.get("pipeline.expect.tx_id", "transaction_id IS NOT NULL")
+EXPECT_VALID_QTY = spark.conf.get("pipeline.expect.valid_qty", "quantity > 0")
 
 # ==========================================
 # 1. BRONZE SOURCE VIEWS
@@ -62,8 +66,8 @@ def view_bronze_inventory():
     comment="Unified view of historical batch transactions and streaming live orders",
     table_properties={"quality": "silver"}
 )
-@dlt.expect_or_drop("valid_transaction_id", "transaction_id IS NOT NULL")
-@dlt.expect_or_drop("valid_quantity", "quantity > 0")
+@dlt.expect_or_drop("valid_transaction_id", EXPECT_VALID_TX_ID)
+@dlt.expect_or_drop("valid_quantity", EXPECT_VALID_QTY)
 def silver_transactions():
     batch_df = (
         dlt.read("view_bronze_transactions_batch")
@@ -134,7 +138,7 @@ def silver_stores():
     comment="Cleaned product returns data",
     table_properties={"quality": "silver"}
 )
-@dlt.expect_or_drop("valid_return_quantity", "quantity > 0")
+@dlt.expect_or_drop("valid_return_quantity", EXPECT_VALID_QTY)
 def silver_returns():
     return (
         dlt.read("view_bronze_returns")
