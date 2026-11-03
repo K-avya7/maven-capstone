@@ -1,9 +1,13 @@
 import dlt
-from pyspark.sql.functions import col, lit, to_date, to_timestamp, concat_ws, coalesce
+from pyspark.sql.functions import (
+    col, lit, to_date, to_timestamp, concat_ws, 
+    coalesce, current_timestamp, when, expr
+)
 
 # Load dynamic pipeline configurations
 CATALOG = spark.conf.get("pipeline.catalog", "maven_catalog")
 BRONZE_SCHEMA = spark.conf.get("pipeline.bronze_schema", "bronze")
+AUDIT_SCHEMA = spark.conf.get("pipeline.audit_schema", "audit")
 
 # Dynamic expectations from pipeline parameters (fallback defaults provided)
 EXPECT_VALID_TX_ID = spark.conf.get("pipeline.expect.tx_id", "transaction_id IS NOT NULL")
@@ -57,18 +61,12 @@ def view_bronze_inventory():
 
 
 # ==========================================
-# 2. SILVER TABLES & TRANSFORMATIONS
+# 2. STAGING & TRANSACTIONS PROCESSING
 # ==========================================
 
-# --- UNIFIED TRANSACTIONS ---
-@dlt.table(
-    name="silver_transactions",
-    comment="Unified view of historical batch transactions and streaming live orders",
-    table_properties={"quality": "silver"}
-)
-@dlt.expect_or_drop("valid_transaction_id", EXPECT_VALID_TX_ID)
-@dlt.expect_or_drop("valid_quantity", EXPECT_VALID_QTY)
-def silver_transactions():
+# Intermediate view unifying batch and stream before rule evaluation
+@dlt.view
+def view_staged_transactions():
     batch_df = (
         dlt.read("view_bronze_transactions_batch")
         .select(
@@ -102,6 +100,50 @@ def silver_transactions():
     
     return batch_df.unionByName(stream_df).dropDuplicates(["transaction_id"])
 
+
+# Clean Silver Transactions (valid records only)
+@dlt.table(
+    name="silver_transactions",
+    comment="Unified view of historical batch transactions and streaming live orders",
+    table_properties={"quality": "silver"}
+)
+@dlt.expect_or_drop("valid_transaction_id", EXPECT_VALID_TX_ID)
+@dlt.expect_or_drop("valid_quantity", EXPECT_VALID_QTY)
+def silver_transactions():
+    return dlt.read("view_staged_transactions")
+
+
+# ==========================================
+# 3. AUDIT & QUARANTINE
+# ==========================================
+
+@dlt.table(
+    name=f"{CATALOG}.{AUDIT_SCHEMA}.quarantine_transactions",
+    comment="Quarantined transactions failing data quality expectations",
+    table_properties={"quality": "audit"}
+)
+def quarantine_transactions():
+    invalid_tx_id = ~expr(EXPECT_VALID_TX_ID)
+    invalid_qty = ~expr(EXPECT_VALID_QTY)
+
+    return (
+        dlt.read("view_staged_transactions")
+        .filter(invalid_tx_id | invalid_qty)
+        .withColumn(
+            "quarantine_reasons",
+            concat_ws(
+                "; ",
+                when(invalid_tx_id, lit(f"Failed expectation: {EXPECT_VALID_TX_ID}")),
+                when(invalid_qty, lit(f"Failed expectation: {EXPECT_VALID_QTY}"))
+            )
+        )
+        .withColumn("quarantined_at", current_timestamp())
+    )
+
+
+# ==========================================
+# 4. OTHER SILVER TABLES & SCD TYPE 2
+# ==========================================
 
 # --- STORES & REGIONS DENORMALIZATION ---
 @dlt.table(
